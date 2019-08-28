@@ -367,19 +367,13 @@ static ssize_t _sde_debugfs_motUtil_read(struct file *file,
 		return 0;
 
 	mutex_lock(&motUtil_data.lock);
-	if (motUtil_data.cmd_status < 0 || !motUtil_data.read_cmd) {
+	if (!motUtil_data.read_cmd) {
 		blen = snprintf(buffer, MAX_CMD_PAYLOAD_SIZE,
-					"motUtil_status: %d\n",
-					motUtil_data.cmd_status);
+			"motUtil_status: 0x%x\n",
+			motUtil_data.last_cmd_tx_status);
 	} else if (motUtil_data.motUtil_type == MOTUTIL_DISP_UTIL) {
 			blen = _sde_debugfs_motUtil_dispUtil_read(buffer);
-	} else if (motUtil_data.motUtil_type == MOTUTIL_KMS_PROP_TEST) {
-                blen = snprintf(buffer, 16, "motUtil_read: ");
-                blen += snprintf((buffer + blen), 12, "0x%08x ",
-                                                        motUtil_data.val);
-                blen += snprintf((buffer + blen), 2, "\n");
-        }
-
+	}
 
         SDE_INFO("%s\n", buffer);
 

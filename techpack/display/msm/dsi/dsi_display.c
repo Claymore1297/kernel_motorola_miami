@@ -1153,7 +1153,7 @@ static int dsi_display_dispUtil_prepare(const char *cmd_buf, u32 cmd_buf_len,
 	/* DISPUTIL_CMD_TYPE = 1 for DSI write cmd
 	 * DISPUTIL_CMD_TYPE = 0 for DSI read cmd */
 	if (cmd_buf[DISPUTIL_CMD_TYPE] == DISPUTIL_DSI_READ) {
-		//cmd->msg.flags |= MIPI_DSI_MSG_READ; /* This is a read DSI */
+		cmd->msg.flags |= MIPI_DSI_MSG_READ; /* This is a read DSI */
 		cmd->msg.rx_buf = motUtil_data->rd_buf;
 		/* cmd_buf[3] = number bytes host wants to read */
 		cmd->msg.rx_len = cmd_buf[DISPUTIL_NUM_BYTE_RD];
@@ -1541,8 +1541,6 @@ int dsi_display_cmd_receive(void *display, const char *cmd_buf,
                 return -EINVAL;
         }
 
-	SDE_EVT32(cmd_buf_len, recv_buf_len);
-
         rc = dsi_display_cmd_prepare(cmd_buf, cmd_buf_len,
                         &cmd, cmd_payload, MAX_CMD_PAYLOAD_SIZE);
         if (rc) {
@@ -1566,6 +1564,51 @@ int dsi_display_cmd_receive(void *display, const char *cmd_buf,
         if (rc <= 0)
                 DSI_ERR("[DSI] Display command receive failed, rc=%d\n", rc);
 
+end:
+        mutex_unlock(&dsi_display->display_lock);
+        return rc;
+}
+
+int dsi_display_motUtil_transfer(void *display, const char *cmd_buf,
+                u32 cmd_buf_len, struct motUtil *motUtil_data)
+{
+        struct dsi_display *dsi_display = display;
+        struct dsi_cmd_desc cmd;
+        u8 cmd_payload[MAX_CMD_PAYLOAD_SIZE];
+        int rc = 0;
+        bool state = false;
+
+        if (!dsi_display || !cmd_buf) {
+                DSI_ERR("[DSI] invalid params\n");
+                return -EINVAL;
+        }
+
+        DSI_INFO("[DSI] Display dispUtil transfer\n");
+
+        rc = dsi_display_dispUtil_prepare(cmd_buf, cmd_buf_len,
+                                &cmd, cmd_payload, MAX_CMD_PAYLOAD_SIZE,
+                                motUtil_data);
+        if (rc) {
+                DSI_ERR("[DSI] command prepare failed. rc %d\n", rc);
+                return rc;
+        }
+
+        mutex_lock(&dsi_display->display_lock);
+        rc = dsi_display_ctrl_get_host_init_state(dsi_display, &state);
+        if (rc || !state) {
+                DSI_ERR("[DSI] Invalid host state %d rc %d\n",
+                                                state, rc);
+                rc = -EPERM;
+                goto end;
+        }
+
+        /*
+         * rc will be returned from ops->transfer, which will be 0 or 1 for
+         * DSI write command. rc will be returned for number of read bytes
+         * for DSI read commad
+         */
+        rc = dsi_display->host.ops->transfer(&dsi_display->host,
+                                                &cmd.msg);
 end:
         mutex_unlock(&dsi_display->display_lock);
         return rc;
