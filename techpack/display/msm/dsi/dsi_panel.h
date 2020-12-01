@@ -409,6 +409,7 @@ struct dsi_panel {
 
 	bool is_hbm_using_51_cmd;
 	int hbm_en_gpio;
+	int paramVersion;
 };
 
 bool dsi_display_all_displays_dead(void);
