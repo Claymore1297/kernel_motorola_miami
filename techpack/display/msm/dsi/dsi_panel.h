@@ -412,6 +412,8 @@ struct dsi_panel {
 	int paramVersion;
 
 	bool hbm_state;
+	bool acl_state;
+	bool cabc_state;
 };
 
 bool dsi_display_all_displays_dead(void);
