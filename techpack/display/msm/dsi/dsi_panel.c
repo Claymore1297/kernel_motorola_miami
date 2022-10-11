@@ -1274,6 +1274,8 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 		}
 	}
 
+	panel->hbm_state = param_info->value;
+
 	return rc;
 };
 
