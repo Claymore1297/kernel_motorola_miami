@@ -456,6 +456,21 @@ static ssize_t liquid_detection_ctl_store(struct device *dev,
 		dev_info(DEV_MMI, "%s: LPD state is %d\n", __func__, touch_cdev->lpd_state);
 	}
 	mutex_unlock(&touch_cdev->extif_mutex);
+	switch (value >> 4) {
+		case 0x1:
+			bit = TS_MMI_GESTURE_ZERO;
+			break;
+		case 0x2:
+			bit = TS_MMI_GESTURE_SINGLE;
+			break;
+		case 0x3:
+			bit = TS_MMI_GESTURE_DOUBLE;
+			break;
+		default:
+			return size;
+	}
+
+	gesture_set(touch_cdev, bit, value & 0x1);
 
 	return size;
 }
