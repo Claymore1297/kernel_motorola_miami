@@ -41,7 +41,8 @@ struct DATARMNET6c41b886b2{uint32_t DATARMNET4da4612f1e;uint32_t
 DATARMNETa3f89581b5;uint16_t DATARMNETc790ff30fc;uint16_t DATARMNET208ea67e1d;};
 struct DATARMNET837c876a22{uint32_t DATARMNET8c11bd9466;uint32_t 
 DATARMNET87636d0152;};struct DATARMNET1ac24ff95c{uint32_t DATARMNET8c11bd9466;
-uint32_t ack_thresh;};
+uint32_t ack_thresh;};struct DATARMNET80e227e008{uint8_t DATARMNET035f475d5c;
+uint8_t DATARMNETcfb5dc7296;};
 #define DATARMNETa35687f809 "RMNET_SHS_MSG"
 enum{DATARMNETeaa13301a0,DATARMNETafee1e9070,DATARMNET943966c53e,};enum{
 DATARMNET5f0371060e,DATARMNETc08daf87d4,DATARMNET8070cc0bdc,DATARMNETc2be398ed4,
@@ -67,13 +68,9 @@ DATARMNET740f3b34b3(struct sk_buff*DATARMNETaafc1d9519,struct genl_info*
 DATARMNET54338da2ff);int DATARMNET29175fb5fc(struct sk_buff*DATARMNETaafc1d9519,
 struct genl_info*DATARMNET54338da2ff);int DATARMNETd81d2866ba(struct sk_buff*
 DATARMNETaafc1d9519,struct genl_info*DATARMNET54338da2ff);int 
-DATARMNET283f08f439(struct sk_buff*DATARMNETaafc1d9519,struct genl_info*
-DATARMNET54338da2ff);int DATARMNET9bbfc822c2(struct sk_buff*DATARMNETaafc1d9519,
-struct genl_info*DATARMNET54338da2ff);int DATARMNET5d4ca1da1c(struct genl_info*
-DATARMNET54338da2ff,int val);int DATARMNET5945236cd3(int val);int 
-DATARMNETa9a7fa898c(void);void DATARMNET8d0d510d45(uint32_t DATARMNETaf3d356342,
-struct DATARMNET177911299b*DATARMNET60b6e12cfd);int DATARMNETb5d58adbe7(struct 
-DATARMNET177911299b*msg_ptr);int DATARMNETd65d1351b9(struct sk_buff*
+DATARMNETc850634243(struct sk_buff*DATARMNETaafc1d9519,struct genl_info*
+DATARMNET54338da2ff);int DATARMNET283f08f439(struct sk_buff*DATARMNETaafc1d9519,
+struct genl_info*DATARMNET54338da2ff);int DATARMNET9bbfc822c2(struct sk_buff*
 DATARMNETaafc1d9519,struct genl_info*DATARMNET54338da2ff);int 
 DATARMNET5d4ca1da1c(struct genl_info*DATARMNET54338da2ff,int val);int 
 DATARMNET5945236cd3(int val);int DATARMNETa9a7fa898c(void);void 
