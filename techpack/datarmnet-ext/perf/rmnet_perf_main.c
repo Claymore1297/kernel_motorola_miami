@@ -19,6 +19,7 @@
 #include "rmnet_perf_tcp.h"
 #include "rmnet_perf_udp.h"
 MODULE_LICENSE("\x47\x50\x4c\x20\x76\x32");static char*verinfo[]={
+"\x38\x61\x62\x30\x61\x38\x65\x65","\x66\x32\x32\x62\x61\x63\x65\x30",
 "\x63\x63\x39\x38\x66\x30\x38\x61","\x63\x65\x37\x39\x33\x32\x31\x63",
 "\x35\x64\x63\x64\x64\x34\x63\x30","\x34\x63\x39\x62\x35\x33\x33\x37",
 "\x61\x33\x62\x61\x62\x64\x34\x30","\x37\x66\x30\x37\x38\x66\x39\x36",
@@ -78,7 +79,7 @@ ETH_P_IP)){struct iphdr*DATARMNET86f1f2cdc9,DATARMNETbf6548198e;
 DATARMNET86f1f2cdc9=skb_header_pointer(DATARMNET543491eb0f,(0xd2d+202-0xdf7),
 sizeof(*DATARMNET86f1f2cdc9),&DATARMNETbf6548198e);if(!DATARMNET86f1f2cdc9||
 ip_is_fragment(DATARMNET86f1f2cdc9))return;if(DATARMNET86f1f2cdc9->protocol==
-IPPROTO_TCP){if(DATARMNETc03b668e4c)DATARMNET9250714999(DATARMNET543491eb0f);}}
+IPPROTO_TCP){if(DATARMNETc03b668e4c)DATARMNETd8fdde8978(DATARMNET543491eb0f);}}
 else if(DATARMNET543491eb0f->protocol==htons(ETH_P_IPV6)){struct ipv6hdr*
 DATARMNETbf55123e5b,DATARMNETcf1d9e2c1e;int DATARMNET611d08d671;__be16 
 DATARMNET98fed39916;u8 DATARMNET65293f17c4;DATARMNETbf55123e5b=
