@@ -5258,6 +5258,22 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 	},
 };
 
+#ifdef CONFIG_AW882XX_STEREO_SMARTPA_PRI
+static struct snd_soc_dai_link msm_pri_mi2s_tx_hotless_dai_links[] = {
+	{
+		.name = "Primary MI2S_TX Hostless",
+		.stream_name = "Primary MI2S_TX Hostless Capture",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(sec_mi2s_tx_hostless),
+	},
+};
+#else
 static struct snd_soc_dai_link msm_sec_mi2s_tx_hotless_dai_links[] = {
 	{
 		.name = "Secondary MI2S_TX Hostless",
@@ -5272,6 +5288,7 @@ static struct snd_soc_dai_link msm_sec_mi2s_tx_hotless_dai_links[] = {
 		SND_SOC_DAILINK_REG(sec_mi2s_tx_hostless),
 	},
 };
+#endif
 
 static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 	{/* hw:x,33 */
@@ -5983,7 +6000,11 @@ static struct snd_soc_dai_link msm_holi_dai_links[
 			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link) +
 			ARRAY_SIZE(msm_wcn_btfm_be_dai_links) +
+#ifdef CONFIG_AW882XX_STEREO_SMARTPA_PRI
+			ARRAY_SIZE(msm_pri_mi2s_tx_hotless_dai_links)];
+#else
 			ARRAY_SIZE(msm_sec_mi2s_tx_hotless_dai_links)];
+#endif
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -6241,6 +6262,26 @@ void awinic_set_dai_name(const char* drvdainame, const char*drvname)
 }
 EXPORT_SYMBOL(awinic_set_dai_name);
 
+#ifdef CONFIG_AW882XX_STEREO_SMARTPA_PRI
+static int aw_update_dai_link_name(struct snd_soc_dai_link *dailink, int len1)
+{
+	int i;
+
+	if (aw_codecs_num != 0) {
+		for (i = 0; i < len1; i++) {
+			if((!strcmp(dailink[i].stream_name, "Primary MI2S Playback")) ||
+				(!strcmp(dailink[i].stream_name, "Primary MI2S Capture"))){
+				dailink[i].num_codecs = aw_codecs_num;
+				dailink[i].codecs = aw_codecs;
+			}
+		}
+	} else {
+		pr_err("aw_codecs is empty\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+#else
 static int aw_update_dai_link_name(struct snd_soc_dai_link *dailink, int len1)
 {
 	int i;
@@ -6259,6 +6300,8 @@ static int aw_update_dai_link_name(struct snd_soc_dai_link *dailink, int len1)
 	}
 	return 0;
 }
+#endif
+
 #endif
 
 
@@ -6370,10 +6413,18 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		}
 
 		if (mi2s_audio_intf) {
+
+#ifdef CONFIG_AW882XX_STEREO_SMARTPA_PRI
+			memcpy(msm_holi_dai_links + total_links,
+				msm_pri_mi2s_tx_hotless_dai_links,
+				sizeof(msm_pri_mi2s_tx_hotless_dai_links));
+			total_links += ARRAY_SIZE(msm_pri_mi2s_tx_hotless_dai_links);
+#else
 			memcpy(msm_holi_dai_links + total_links,
 				msm_sec_mi2s_tx_hotless_dai_links,
 				sizeof(msm_sec_mi2s_tx_hotless_dai_links));
 			total_links += ARRAY_SIZE(msm_sec_mi2s_tx_hotless_dai_links);
+#endif
 		}
 
 		dailink = msm_holi_dai_links;
