@@ -5270,7 +5270,7 @@ static struct snd_soc_dai_link msm_pri_mi2s_tx_hotless_dai_links[] = {
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-		SND_SOC_DAILINK_REG(sec_mi2s_tx_hostless),
+		SND_SOC_DAILINK_REG(pri_mi2s_tx_hostless),
 	},
 };
 #else
