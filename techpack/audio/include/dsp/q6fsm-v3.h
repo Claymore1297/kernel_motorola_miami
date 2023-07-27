@@ -44,7 +44,7 @@
 #define CAPI_V2_PARAM_FSADSP_ROTATION      0x10001FB1
 #define CAPI_V2_PARAM_FSADSP_FADE          0x10001FB7
 
-#define Q6FSM_RETRY_TIME (3)
+#define Q6FSM_RETRY_TIME (1)
 #define Q6FSM_SLEEP_TIME (10)
 
 struct bsg_config_v2 {
@@ -542,7 +542,7 @@ static int q6fsm_vbat_monitor_work(struct q6fsm_afe *q6fsm)
 
 	if (!q6fsm_get_rx_status()) {
 		fsm_info("RX module isn't ready");
-		return 0;
+		return -EINVAL;
 	}
 
 	if (q6fsm->bsg_version == 2) {
