@@ -69,6 +69,7 @@ struct aw_container *g_awinic_skt_cfg = NULL;
 #define AW882XX_SCENE_VOIP_ID				4
 #define AW882XX_SCENE_DEEPBUFFER_ID			5
 #define AW882XX_SCENE_FASTTRACK_ID			6
+#define AW882XX_SCENE_HAC_ID		        7
 
 #ifdef CONFIG_AW882XX_ALGO_BIN_PARAMS
 struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
@@ -91,7 +92,7 @@ struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
 	{
 		AW882XX_SCENE_HANDSET_ID,
 		"Handset",
-		3,
+		4,
 		3,
 		0,
 		0,
@@ -99,7 +100,7 @@ struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
 	{
 		AW882XX_SCENE_VOICE_ID,
 		"Voice",
-		4,
+		5,
 		4,
 		0,
 		0,
@@ -107,7 +108,7 @@ struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
 	{
 		AW882XX_SCENE_VOIP_ID,
 		"Voip",
-		5,
+		6,
 		5,
 		0,
 		0,
@@ -115,7 +116,7 @@ struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
 	{
 		AW882XX_SCENE_DEEPBUFFER_ID,
 		"deepbuffer",
-		6,
+		7,
 		6,
 		0,
 		0,
@@ -123,11 +124,20 @@ struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
 	{
 		AW882XX_SCENE_FASTTRACK_ID,
 		"fasttrack",
-		7,
+		8,
 		7,
 		0,
 		0,
 	},
+	{
+		AW882XX_SCENE_HAC_ID,
+		"Hac",
+		3,
+		8,
+		0,
+		0,
+	},
+
 };
 #endif
 
@@ -1927,6 +1937,47 @@ static int aw882xx_set_algo_handset_switch(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int aw882xx_get_algo_hac_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st =
+			&aw882xx_scene_state[AW882XX_SCENE_HAC_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__,
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+
+	return 0;
+}
+
+static int aw882xx_set_algo_hac_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_HAC_ID, is_active);
+
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+
 static int aw882xx_get_algo_voice_switch(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -2135,6 +2186,8 @@ static struct snd_kcontrol_new aw882xx_controls[] = {
 		aw882xx_get_algo_music_deepbuffer_switch, aw882xx_set_algo_music_deepbuffer_switch),
 	SOC_ENUM_EXT("aw882xx_algo_music_fasttrack_switch", aw882xx_snd_enum[1],
 		aw882xx_get_algo_music_fasttrack_switch, aw882xx_set_algo_music_fasttrack_switch),
+	SOC_ENUM_EXT("aw882xx_algo_hac_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_hac_switch, aw882xx_set_algo_hac_switch),
 #endif
 };
 
