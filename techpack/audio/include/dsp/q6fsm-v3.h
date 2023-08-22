@@ -73,7 +73,6 @@ struct q6fsm_afe {
 	bool monitor_en;
 	int bsg_version;
 	struct bsg_config_v2 config;
-	int angle;
 };
 
 typedef enum _fs__chann_t
@@ -260,7 +259,7 @@ static int q6fsm_afe_get_params(struct param_hdr_v3 *param_hdr,
 bool q6fsm_get_rx_status(void)
 {
 	struct param_hdr_v3 param_hdr;
-	int enable;
+	uint32_t enable;
 	int ret;
 
 	if (!q6fsm_check_dsp_ready()) {
@@ -287,13 +286,10 @@ EXPORT_SYMBOL(q6fsm_get_rx_status);
 
 int q6fsm_set_rx_enable(int enable)
 {
-	struct q6fsm_afe *q6fsm = g_fsm_afe;
 	struct param_hdr_v3 param_hdr;
 	uint32_t param;
 	int ret;
 
-	if (q6fsm == NULL)
-		return -EINVAL;
 
 	if (!q6fsm_check_dsp_ready()) {
 		fsm_info("DSP not ready yet!");
@@ -305,7 +301,7 @@ int q6fsm_set_rx_enable(int enable)
 	param_hdr.instance_id = 0;
 	param_hdr.reserved = 0;
 	param_hdr.param_id = CAPI_V2_PARAM_FSADSP_RX_ENABLE;
-	param_hdr.param_size = sizeof(int);
+	param_hdr.param_size = sizeof(param);
 	ret = q6fsm_afe_set_params(&param_hdr,
 		(uint8_t *)&param, sizeof(param));
 	if (ret) {
@@ -319,28 +315,22 @@ EXPORT_SYMBOL(q6fsm_set_rx_enable);
 
 int q6fsm_set_rotation(int angle)
 {
-	struct q6fsm_afe *q6fsm = g_fsm_afe;
 	struct param_hdr_v3 param_hdr;
 	fsm_rotation_info_t param = {0};
 	int ret;
 
-	if (q6fsm == NULL)
-		return -EINVAL;
 
 	if (!q6fsm_get_rx_status()) {
 		fsm_info("RX module isn't ready");
 		return -EINVAL;
 	}
 
-	if(q6fsm->angle == angle){
-		fsm_info("no need to rotation angle");
-		return 0;
-	}
-
 	if(angle == 0){
+		param.angle = 0;
 		param.ch_sequence[0] = 0;
 		param.ch_sequence[1] = 1;
 	}else if(angle == 1){
+		param.angle = 180;
 		param.ch_sequence[0] = 1;
 		param.ch_sequence[1] = 0;
 	}else{
@@ -348,14 +338,13 @@ int q6fsm_set_rotation(int angle)
 		return  -EINVAL;
 	}
 
-	param.angle = angle;
 	param_hdr.module_id = AFE_MODULE_ID_FSADSP_RX;
 	param_hdr.instance_id = 0;
 	param_hdr.reserved = 0;
 	param_hdr.param_id = CAPI_V2_PARAM_FSADSP_ROTATION;
-	param_hdr.param_size = sizeof(int);
+	param_hdr.param_size = sizeof(fsm_rotation_info_t);
 	ret = q6fsm_afe_set_params(&param_hdr,
-		(uint8_t *)&param, sizeof(param));
+		(uint8_t *)&param, sizeof(fsm_rotation_info_t));
 	if (ret) {
 		fsm_err("Set params fail:%d", ret);
 		return ret;
@@ -365,15 +354,6 @@ int q6fsm_set_rotation(int angle)
 }
 EXPORT_SYMBOL(q6fsm_set_rotation);
 
-int q6fsm_get_rotation(int *angle)
-{
-	struct q6fsm_afe *q6fsm = g_fsm_afe;
-
-	*angle = q6fsm->angle;
-
-	return 0;
-}
-EXPORT_SYMBOL(q6fsm_get_rotation);
 
 void q6fsm_fsm_check_scene_status(bool status)
 {
