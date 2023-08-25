@@ -262,6 +262,10 @@ bool q6fsm_get_rx_status(void)
 	uint32_t enable;
 	int ret;
 
+	if(fsm_scene_status == false){
+		return -EINVAL;
+	}
+
 	if (!q6fsm_check_dsp_ready()) {
 		fsm_info("DSP not ready yet!");
 		return -EINVAL;
@@ -290,6 +294,9 @@ int q6fsm_set_rx_enable(int enable)
 	uint32_t param;
 	int ret;
 
+	if(fsm_scene_status == false){
+		return -EINVAL;
+	}
 
 	if (!q6fsm_check_dsp_ready()) {
 		fsm_info("DSP not ready yet!");
