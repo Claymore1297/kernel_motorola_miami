@@ -6250,15 +6250,20 @@ static const struct of_device_id holi_asoc_machine_of_match[]  = {
 #ifdef CONFIG_AW882XX_STEREO_SMARTPA
 struct snd_soc_dai_link_component aw_codecs[4];
 static unsigned int aw_codecs_num;
+static DEFINE_MUTEX(aw_dailink_mutex);
 
 void awinic_set_dai_name(const char* drvdainame, const char*drvname)
 {
+	mutex_lock(&aw_dailink_mutex);
 	if (aw_codecs_num < ARRAY_SIZE(aw_codecs)) {
 		aw_codecs[aw_codecs_num].dai_name = drvdainame;
 		aw_codecs[aw_codecs_num].name = drvname;
 		aw_codecs[aw_codecs_num].of_node = NULL;
+		pr_info("aw_codecs_num[%d] codec name %s dai name %s\n",
+		            aw_codecs_num, aw_codecs[aw_codecs_num].name, aw_codecs[aw_codecs_num].dai_name);
 		aw_codecs_num++;
 	}
+	mutex_unlock(&aw_dailink_mutex);
 }
 EXPORT_SYMBOL(awinic_set_dai_name);
 
