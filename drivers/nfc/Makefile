@@ -20,3 +20,4 @@ obj-$(CONFIG_NFC_S3FWRN5)	+= s3fwrn5/
 obj-$(CONFIG_NFC_ST95HF)	+= st95hf/
 obj-$(CONFIG_SEC_NFC)           += samsung/
 obj-y				+= qti/
+obj-$(CONFIG_SEC_NFC)		+= sec_nfc/
