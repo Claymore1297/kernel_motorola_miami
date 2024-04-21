@@ -1458,7 +1458,7 @@ CONFIG_SEC_ESE_COLDRESET=m
 # end of Near Field Communication (NFC) devices
 # end of Near Field Communication (NFC) devices
 
-# CONFIG_NFC_QTI_I2C is not set
+CONFIG_NFC_QTI_I2C=m
 # CONFIG_NFC_QTI_I3C_GPIO is not set
 # CONFIG_PSAMPLE is not set
 # CONFIG_NET_IFE is not set
