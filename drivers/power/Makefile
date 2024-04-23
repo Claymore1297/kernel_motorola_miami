@@ -19,3 +19,4 @@ obj-$(CONFIG_MMI_SM5602_FG)	+= sm5602_fg_mmi/
 obj-$(CONFIG_MMI_DISCRETE_CHARGER) += mmi_discrete_charger/
 obj-$(CONFIG_MMI_DISCRETE_TURBO_CHARGER) += mmi_discrete_turbo_charger/
 obj-$(CONFIG_MMI_MM8013C_FG)	+= mm8013c_fg_mmi/
+obj-$(CONFIG_CPS_WLS_CHARGER)   += cps4019_wls_charger/
