@@ -1,0 +1,16 @@
+#
+# AW862X Driver
+#
+
+config AW862X_HAPTIC
+        tristate "Awinic AW862X haptic driver"
+        depends on I2C && INPUT_AWINIC_HAPTIC
+        help
+          Say Y here if you have Awinic AW862X haptic controller
+          chip in your system.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called aw862x.
+
