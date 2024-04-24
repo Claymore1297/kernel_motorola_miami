@@ -1,0 +1,10 @@
+config BQ25980_MMI_IIO
+        tristate "BQ25980_MMI_IIO"
+        default n
+        help
+         Say Y here if you have a mmi bq25980 iio compatible
+         device connected.
+
+         This driver can also be built as a module.  If so, the module
+         will be called bq25980_mmi_iio.
+
