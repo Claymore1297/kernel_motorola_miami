@@ -102,3 +102,6 @@ obj-$(CONFIG_LEDS_USER)			+= uleds.o
 
 # LED Triggers
 obj-$(CONFIG_LEDS_TRIGGERS)		+= trigger/
+
+# LEDS AW2033
+obj-$(CONFIG_LEDS_AW2033)		+= aw2033/
