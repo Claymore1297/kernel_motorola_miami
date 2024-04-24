@@ -1,6 +1,7 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/drivers/leds/aw2033
 
 
 obj-m += leds_aw2033.o

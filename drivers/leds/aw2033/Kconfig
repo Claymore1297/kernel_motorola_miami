@@ -1,0 +1,7 @@
+config LEDS_AW2033
+        tristate "LEDS AW2023"
+        help
+          Say Y to enable support for aw2033 leds.
+          If unsure, say N
+          This driver can also be built as a module.  If so, the module
+          will be called leds_aw2033.
