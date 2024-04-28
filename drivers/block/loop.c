@@ -248,7 +248,7 @@ loop_validate_block_size(unsigned short bsize)
  *
  * Callers must validate that the size passed into this function fits into
  * a sector_t, eg using loop_validate_size()
- */
+*/
 static void loop_set_size(struct loop_device *lo, loff_t size)
 {
 	struct block_device *bdev = lo->lo_device;
@@ -257,6 +257,14 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 	bd_set_size(bdev, size << SECTOR_SHIFT);
 	/* let user-space know about the new size */
 	kobject_uevent(&disk_to_dev(bdev->bd_disk)->kobj, KOBJ_CHANGE);
+}
+
+static void
+figure_loop_size(struct loop_device *lo, loff_t offset, loff_t sizelimit)
+{
+	loff_t size = get_size(offset, sizelimit, lo->lo_backing_file);
+
+	loop_set_size(lo, size);
 }
 
 static inline int
@@ -964,6 +972,127 @@ static void loop_update_rotational(struct loop_device *lo)
 		blk_queue_flag_clear(QUEUE_FLAG_NONROT, q);
 }
 
+static int loop_set_fd(struct loop_device *lo, fmode_t mode,
+		       struct block_device *bdev, unsigned int arg)
+{
+	struct file	*file;
+	struct inode	*inode;
+	struct address_space *mapping;
+	struct block_device *claimed_bdev = NULL;
+	int		lo_flags = 0;
+	int		error;
+	loff_t		size;
+	bool		partscan;
+
+	/* This is safe, since we have a reference from open(). */
+	__module_get(THIS_MODULE);
+
+	error = -EBADF;
+	file = fget(arg);
+	if (!file)
+		goto out;
+
+	/*
+	 * If we don't hold exclusive handle for the device, upgrade to it
+	 * here to avoid changing device under exclusive owner.
+	 */
+	if (!(mode & FMODE_EXCL)) {
+		claimed_bdev = bd_start_claiming(bdev, loop_set_fd);
+		if (IS_ERR(claimed_bdev)) {
+			error = PTR_ERR(claimed_bdev);
+			goto out_putf;
+		}
+	}
+
+	error = mutex_lock_killable(&loop_ctl_mutex);
+	if (error)
+		goto out_bdev;
+
+	error = -EBUSY;
+	if (lo->lo_state != Lo_unbound)
+		goto out_unlock;
+
+	error = loop_validate_file(file, bdev);
+	if (error)
+		goto out_unlock;
+
+	mapping = file->f_mapping;
+	inode = mapping->host;
+
+	if (!(file->f_mode & FMODE_WRITE) || !(mode & FMODE_WRITE) ||
+	    !file->f_op->write_iter)
+		lo_flags |= LO_FLAGS_READ_ONLY;
+
+	size = get_loop_size(lo, file);
+
+	error = loop_prepare_queue(lo);
+	if (error)
+		goto out_unlock;
+
+	error = 0;
+
+	set_device_ro(bdev, (lo_flags & LO_FLAGS_READ_ONLY) != 0);
+
+	lo->use_dio = false;
+	lo->lo_device = bdev;
+	lo->lo_flags = lo_flags;
+	lo->lo_backing_file = file;
+	lo->transfer = NULL;
+	lo->ioctl = NULL;
+	lo->lo_sizelimit = 0;
+	lo->old_gfp_mask = mapping_gfp_mask(mapping);
+	mapping_set_gfp_mask(mapping, lo->old_gfp_mask & ~(__GFP_IO|__GFP_FS));
+
+	if (!(lo_flags & LO_FLAGS_READ_ONLY) && file->f_op->fsync)
+		blk_queue_write_cache(lo->lo_queue, true, false);
+
+	if (io_is_direct(lo->lo_backing_file) && inode->i_sb->s_bdev) {
+		/* In case of direct I/O, match underlying block size */
+		unsigned short bsize = bdev_logical_block_size(
+			inode->i_sb->s_bdev);
+
+		blk_queue_logical_block_size(lo->lo_queue, bsize);
+		blk_queue_physical_block_size(lo->lo_queue, bsize);
+		blk_queue_io_min(lo->lo_queue, bsize);
+	}
+
+	loop_update_rotational(lo);
+	loop_update_dio(lo);
+	loop_sysfs_init(lo);
+	loop_set_size(lo, size);
+
+	set_blocksize(bdev, S_ISBLK(inode->i_mode) ?
+		      block_size(inode->i_bdev) : PAGE_SIZE);
+
+	lo->lo_state = Lo_bound;
+	if (part_shift)
+		lo->lo_flags |= LO_FLAGS_PARTSCAN;
+	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
+
+	/* Grab the block_device to prevent its destruction after we
+	 * put /dev/loopXX inode. Later in __loop_clr_fd() we bdput(bdev).
+	 */
+	bdgrab(bdev);
+	mutex_unlock(&loop_ctl_mutex);
+	if (partscan)
+		loop_reread_partitions(lo, bdev);
+	if (claimed_bdev)
+		bd_abort_claiming(bdev, claimed_bdev, loop_set_fd);
+	return 0;
+
+out_unlock:
+	mutex_unlock(&loop_ctl_mutex);
+out_bdev:
+	if (claimed_bdev)
+		bd_abort_claiming(bdev, claimed_bdev, loop_set_fd);
+out_putf:
+	fput(file);
+out:
+	/* This is safe: open() is still holding a reference. */
+	module_put(THIS_MODULE);
+	return error;
+}
+
 static int
 loop_release_xfer(struct loop_device *lo)
 {
@@ -1346,8 +1475,20 @@ static int loop_clr_fd(struct loop_device *lo)
 	return __loop_clr_fd(lo, false);
 }
 
+/**
+ * loop_set_status_from_info - configure device from loop_info
+ * @lo: struct loop_device to configure
+ * @info: struct loop_info64 to configure the device with
+ *
+ * Configures the loop device parameters according to the passed
+ * in loop_info64 configuration.
+ */
+
 static int
 loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
+
+//loop_set_status_from_info(struct loop_device *lo,
+//			  const struct loop_info64 *info)
 {
 	int err;
 	struct block_device *bdev;
@@ -1393,7 +1534,7 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 
 	err = loop_set_status_from_info(lo, info);
 	if (err)
-		goto out_unfreeze;
+		return err;
 
 	/* Mask out flags that can't be set using LOOP_SET_STATUS. */
 	lo->lo_flags &= LOOP_SET_STATUS_SETTABLE_FLAGS;
@@ -1408,7 +1549,8 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 		loop_set_size(lo, new_size);
 	}
 
-	loop_config_discard(lo);
+	lo->lo_offset = info->lo_offset;
+	lo->lo_sizelimit = info->lo_sizelimit;
 
 	/* update dio if lo_offset or transfer is changed */
 	__loop_update_dio(lo, lo->use_dio);
@@ -1449,11 +1591,6 @@ loop_get_status(struct loop_device *lo, struct loop_info64 *info)
 	info->lo_number = lo->lo_number;
 	info->lo_offset = lo->lo_offset;
 	info->lo_sizelimit = lo->lo_sizelimit;
-
-	/* loff_t vars have been assigned __u64 */
-	if (lo->lo_offset < 0 || lo->lo_sizelimit < 0)
-		return -EOVERFLOW;
-
 	info->lo_flags = lo->lo_flags;
 	memcpy(info->lo_file_name, lo->lo_file_name, LO_NAME_SIZE);
 	memcpy(info->lo_crypt_name, lo->lo_crypt_name, LO_NAME_SIZE);
@@ -1591,8 +1728,7 @@ static int loop_set_capacity(struct loop_device *lo)
 	if (unlikely(lo->lo_state != Lo_bound))
 		return -ENXIO;
 
-	size = get_loop_size(lo, lo->lo_backing_file);
-	loop_set_size(lo, size);
+	figure_loop_size(lo, lo->lo_offset, lo->lo_sizelimit);
 
 	return 0;
 }
