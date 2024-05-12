@@ -36,3 +36,8 @@ config DRM_PANEL_NOTIFICATIONS
 	help
 	 Say Y here if your panel includes support for drm notifications.
 	 If unsure, say N.
+
+config TOUCHCLASS_MMI_MULTIWAY_UPDATE_FW
+        bool "Touchscreen Update FW"
+	help
+	 If unsure, say N.
