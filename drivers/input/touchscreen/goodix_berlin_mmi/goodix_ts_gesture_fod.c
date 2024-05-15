@@ -367,7 +367,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	struct goodix_ts_event gs_event = {0};
 	__maybe_unused int fodx, fody, overlay_area;
 	int ret;
-#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#if IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct gesture_event_data mmi_event;
 	static  unsigned  long  start = 0;
 	int fod_down_interval = 0;
@@ -399,7 +399,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		goto re_send_ges_cmd;
 	}
 	ts_debug("got  gesture type 0x%x", gs_event.gesture_type);
-#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#if IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	if (cd->set_mode.liquid_detection) {
 		underwater_flag = gs_event.gesture_report_info & GOODIX_GESTURE_UNDER_WATER;
 		if ( cd->liquid_status != underwater_flag) {

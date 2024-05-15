@@ -1930,7 +1930,7 @@ void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 	mutex_unlock(&input_dev->mutex);
 }
 
-#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
+#if !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 /**
  * goodix_ts_suspend - Touchscreen suspend function
  * Called by PM/FB/EARLYSUSPEN module to put the device to  sleep
@@ -2075,7 +2075,7 @@ out:
 }
 #endif
 
-#if defined(CONFIG_FB) && !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#if defined(CONFIG_FB) && !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 /**
  * goodix_ts_fb_notifier_callback - Framebuffer notifier callback
  * Called by kernel during framebuffer blanck/unblank phrase
@@ -2106,7 +2106,7 @@ int goodix_ts_fb_notifier_callback(struct notifier_block *self,
 
 #ifdef CONFIG_PM
 #if !defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND) \
-		&& !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+		&& !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 /**
  * goodix_ts_pm_suspend - PM suspend function
  * Called by kernel during system suspend phrase
@@ -2237,7 +2237,7 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 	}
 	ts_info("success register irq");
 
-#if defined(CONFIG_FB) && !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#if defined(CONFIG_FB) && !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	cd->fb_notifier.notifier_call = goodix_ts_fb_notifier_callback;
 	if (fb_register_client(&cd->fb_notifier))
 		ts_err("Failed to register fb notifier client:%d", ret);
@@ -2323,7 +2323,7 @@ static int goodix_later_init_thread(void *data)
 	} else
 		ts_info("success get valid ic config");
 
-#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
+#if !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	ret = goodix_do_fw_update(cd->ic_configs[CONFIG_TYPE_NORMAL],
 			UPDATE_MODE_BLOCK | UPDATE_MODE_SRC_REQUEST);
 	if (ret)
@@ -2351,7 +2351,7 @@ static int goodix_later_init_thread(void *data)
 		goto uninit_fw;
 	}
 
-#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
+#if !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	/* the recomend way to update ic config is throuth ISP,
 	 * if not we will send config with interactive mode
 	 */
@@ -2576,7 +2576,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 		gesture_module_exit();
 		inspect_module_exit();
 		hw_ops->irq_enable(core_data, false);
-	#if defined(CONFIG_FB) && !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	#if defined(CONFIG_FB) && !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 		fb_unregister_client(&core_data->fb_notifier);
 	#endif
 		core_module_prob_sate = CORE_MODULE_REMOVED;
@@ -2598,7 +2598,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 static const struct dev_pm_ops dev_pm_ops = {
 #if !defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND) \
-		&& !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+		&& !IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	.suspend = goodix_ts_pm_suspend,
 	.resume = goodix_ts_pm_resume,
 #elif defined (CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI)
