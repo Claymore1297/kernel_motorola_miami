@@ -1,7 +1,39 @@
 # add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += \
+ccflags-y += -Wall
+ccflags-y += \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)
+USE_TARGET_PRODUCT := $(strip $(subst _factory,, $(TARGET_PRODUCT)))
+else
+USE_TARGET_PRODUCT := $(TARGET_PRODUCT)
+endif
+
+ifneq ($(filter oneli, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_ONELI
+else ifneq ($(filter hiphi, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_HIPHI
+else ifneq ($(filter hiphic, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_HIPHIC
+else ifneq ($(filter li, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_LI
+else ifneq ($(filter eqs, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_EQS
+else ifneq ($(filter tundra%, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_TUNDRA
+else ifneq ($(filter miami%, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_MIAMI
+else ifneq ($(filter rtwo%, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_RTWO
+else ifneq ($(filter bronco, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_BRONCO
+else ifneq ($(filter felix, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DCONFIG_GTP_DISP_MODE
+else ifneq ($(filter zeekr%, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_ZEEKR
+endif
+$(warning "william ccflags-y = $(ccflags-y)")
+
 
 obj-$(CONFIG_TOUCHSCREEN_GOODIX_BRL) := goodix_brl_mmi.o
 goodix_brl_mmi-objs := \
