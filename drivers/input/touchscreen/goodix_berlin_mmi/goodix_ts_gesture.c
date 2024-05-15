@@ -246,7 +246,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	if (QUERYBIT(gsx_gesture->gesture_type,
 		     gs_event.gesture_type)) {
 		gsx_gesture->gesture_data = gs_event.gesture_type;
-#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#if IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_MMI)
 		if (cd->imports && cd->imports->report_gesture) {
 			struct gesture_event_data mmi_event;
 
