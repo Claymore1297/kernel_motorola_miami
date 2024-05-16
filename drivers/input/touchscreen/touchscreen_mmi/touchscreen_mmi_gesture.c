@@ -213,7 +213,6 @@ static inline void update_poison_center(struct touch_event_data *tev)
 
 static void ts_mmi_single_tap_handler(struct ts_mmi_dev *touch_cdev)
 {
-	unsigned char mode_type = touch_cdev->gesture_mode_type;
 	ktime_t now, tmp;
 
 	if (!touch_cdev->single_tap_pressed) {
@@ -300,6 +299,7 @@ static int ts_mmi_cli_gesture_handler(struct gesture_event_data *gev)
 	int key_code;
 	bool need2report = true;
 	struct ts_mmi_dev *touch_cdev = cli_sensor_pdata->touch_cdev;
+	unsigned char mode_type = touch_cdev->gesture_mode_type;
 
 	switch (gev->evcode) {
 	case 1:
