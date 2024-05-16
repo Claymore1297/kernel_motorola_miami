@@ -370,7 +370,8 @@ static ssize_t _sde_debugfs_motUtil_read(struct file *file,
 	if (!motUtil_data.read_cmd) {
 		blen = snprintf(buffer, MAX_CMD_PAYLOAD_SIZE,
 			"motUtil_status: 0x%x\n",
-			motUtil_data.last_cmd_tx_status);
+		        motUtil_data.cmd_status);
+		//	motUtil_data.last_cmd_tx_status);
 	} else if (motUtil_data.motUtil_type == MOTUTIL_DISP_UTIL) {
 			blen = _sde_debugfs_motUtil_dispUtil_read(buffer);
 	}
