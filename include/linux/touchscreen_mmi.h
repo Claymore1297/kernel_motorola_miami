@@ -301,12 +301,6 @@ enum ts_mmi_gesture_bit {
 	TS_MMI_GESTURE_DOUBLE = BIT(2),
 };
 
-enum ts_mmi_gesture_bit {
-	TS_MMI_GESTURE_ZERO = BIT(0),
-	TS_MMI_GESTURE_SINGLE = BIT(1),
-	TS_MMI_GESTURE_DOUBLE = BIT(2),
-};
-
 enum ts_mmi_panel_event {
 	TS_MMI_EVENT_PRE_DISPLAY_OFF,
 	TS_MMI_EVENT_PRE_DISPLAY_ON,

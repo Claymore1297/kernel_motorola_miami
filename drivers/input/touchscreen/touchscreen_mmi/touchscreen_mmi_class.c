@@ -489,6 +489,7 @@ static ssize_t liquid_detection_ctl_store(struct device *dev,
 {
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
 	unsigned int value = 0;
+	unsigned long bit;
 	int err = 0;
 
 	err = sscanf(buf, "%d", &value);
