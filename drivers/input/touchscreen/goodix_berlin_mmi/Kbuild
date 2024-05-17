@@ -31,6 +31,8 @@ else ifneq ($(filter felix, $(USE_TARGET_PRODUCT)), )
         ccflags-y += -DCONFIG_GTP_DISP_MODE
 else ifneq ($(filter zeekr%, $(USE_TARGET_PRODUCT)), )
         ccflags-y += -DPRODUCT_ZEEKR
+else ifneq ($(filter %miami, $(USE_TARGET_PRODUCT)), )
+        ccflags-y += -DPRODUCT_MIAMI
 endif
 $(warning "william ccflags-y = $(ccflags-y)")
 
