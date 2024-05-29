@@ -958,12 +958,11 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 		}
 		core_data->gesture_cmd = gesture_cmd;
 		ts_info("Send enable gesture mode 0x%04x, 0x%02x\n", gesture_cmd, gesture_type);
-#else
+#endif
 #if defined(PRODUCT_MIAMI)
 			hw_ops->gesture(core_data, 0x80);
 #else
 			hw_ops->gesture(core_data, 0);
-#endif
 #endif
 		msleep(16);
 		hw_ops->irq_enable(core_data, true);
