@@ -250,9 +250,6 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 		pr_info("%s: single tap\n", __func__);
 			break;
 	case 2:
-		if (!(mode_type & TS_MMI_GESTURE_ZERO))
-			return 1;
-
 		touch_cdev->udfps_pressed = true;
 		sysfs_notify(&DEV_MMI->kobj, NULL, "udfps_pressed");
 
