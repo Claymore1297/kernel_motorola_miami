@@ -204,6 +204,37 @@ enum binder_deferred_state {
 	BINDER_DEFERRED_RELEASE      = 0x02,
 };
 
+/*struct binder_proc {
+	struct hlist_node proc_node;
+	struct rb_root threads;
+	struct rb_root nodes;
+	struct rb_root refs_by_desc;
+	struct rb_root refs_by_node;
+	struct list_head waiting_threads;
+	int pid;
+	struct task_struct *tsk;
+	const struct cred *cred;
+	struct hlist_node deferred_work_node;
+	int deferred_work;
+	bool is_dead;
+
+	struct list_head todo;
+	struct binder_stats stats;
+	struct list_head delivered_death;
+	u32 max_threads;
+	int requested_threads;
+	int requested_threads_started;
+	int tmp_ref;
+	long default_priority;
+	struct dentry *debugfs_entry;
+	struct binder_alloc alloc;
+	struct binder_context *context;
+	spinlock_t inner_lock;
+	spinlock_t outer_lock;
+	struct dentry *binderfs_entry;
+};
+*/
+//>>>>>>> 189ee9735a4b2e8095b1a6c088ebc8e133872471
 enum {
 	BINDER_LOOPER_STATE_REGISTERED  = 0x01,
 	BINDER_LOOPER_STATE_ENTERED     = 0x02,
@@ -5329,7 +5360,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			goto err;
 		break;
 	case BINDER_SET_MAX_THREADS: {
-		int max_threads;
+		u32 max_threads;
 
 		if (copy_from_user(&max_threads, ubuf,
 				   sizeof(max_threads))) {
