@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * RMNET_CTL header
  *
@@ -8,7 +7,6 @@
 
 #ifndef _RMNET_CTL_H_
 #define _RMNET_CTL_H_
-
 
 #include <linux/skbuff.h>
 
@@ -31,12 +29,6 @@ struct rmnet_ctl_client_if {
 		       const void *data, unsigned int len);
 };
 
-#ifdef CONFIG_RMNET_LA_PLATFORM
 struct rmnet_ctl_client_if *rmnet_ctl_if(void);
-int rmnet_ctl_get_stats(u64 *s, int n);
-#else
-static inline struct rmnet_ctl_client_if *rmnet_ctl_if(void) {return NULL;};
-static inline int rmnet_ctl_get_stats(u64 *s, int n) {return 0;};
-#endif /* CONFIG_RMNET_LA_PLATFORM */
 
 #endif /* _RMNET_CTL_H_ */

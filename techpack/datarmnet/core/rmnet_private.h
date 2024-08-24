@@ -1,5 +1,4 @@
-/* Copyright (c) 2013-2014, 2016-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2013-2014, 2016-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,8 +13,6 @@
 #ifndef _RMNET_PRIVATE_H_
 #define _RMNET_PRIVATE_H_
 
-#include <linux/types.h>
-
 #define RMNET_MAX_PACKET_SIZE      16384
 #define RMNET_DFLT_PACKET_SIZE     1500
 #define RMNET_NEEDED_HEADROOM      16
@@ -27,8 +24,8 @@
 #define RMNET_INGRESS_FORMAT_DL_MARKER_V2       BIT(29)
 
 #define RMNET_FLAGS_INGRESS_COALESCE            BIT(4)
-#define RMNET_PRIV_FLAGS_INGRESS_MAP_CKSUMV5    BIT(5)
-#define RMNET_PRIV_FLAGS_EGRESS_MAP_CKSUMV5     BIT(6)
+#define RMNET_FLAGS_INGRESS_MAP_CKSUMV5         BIT(5)
+#define RMNET_FLAGS_EGRESS_MAP_CKSUMV5          BIT(6)
 
 #define RMNET_INGRESS_FORMAT_DL_MARKER  (RMNET_INGRESS_FORMAT_DL_MARKER_V1 |\
 RMNET_INGRESS_FORMAT_DL_MARKER_V2)
@@ -47,24 +44,5 @@ RMNET_INGRESS_FORMAT_DL_MARKER_V2)
 #define RMNET_EPMODE_VND (1)
 /* Pass the frame directly to another device with dev_queue_xmit() */
 #define RMNET_EPMODE_BRIDGE (2)
-
-/* Struct for skb control block use within rmnet driver */
-struct rmnet_skb_cb {
-	/* MUST be the first entries because of legacy reasons */
-	char flush_shs;
-	char qmap_steer;
-
-	bool tethered;
-
-	/* coalescing stats */
-	u32 coal_bytes;
-	u32 coal_bufsize;
-
-	u32 bif;
-	u32 ack_thresh;
-	u32 ack_forced;
-};
-
-#define RMNET_SKB_CB(skb) ((struct rmnet_skb_cb *)(skb)->cb)
 
 #endif /* _RMNET_PRIVATE_H_ */

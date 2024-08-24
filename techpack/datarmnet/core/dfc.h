@@ -1,5 +1,4 @@
-/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,26 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#include <linux/version.h>
+
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM dfc
 #undef TRACE_INCLUDE_PATH
-
-#ifndef RMNET_TRACE_INCLUDE_PATH
-#if defined(CONFIG_RMNET_LA_PLATFORM)
-#ifdef CONFIG_ARCH_KHAJE
-#define RMNET_TRACE_INCLUDE_PATH .
-#else
-#define RMNET_TRACE_INCLUDE_PATH .
-#endif /* CONFIG_ARCH_KHAJE */
-#elif defined(__arch_um__)
-#define RMNET_TRACE_INCLUDE_PATH .
-#else
-#define RMNET_TRACE_INCLUDE_PATH .
-#endif /* defined(CONFIG_RMNET_LA_PLATFORM) */
-#endif /* RMNET_TRACE_INCLUDE_PATH */
-
-#define TRACE_INCLUDE_PATH RMNET_TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH .
 #define TRACE_INCLUDE_FILE dfc
 
 #if !defined(_TRACE_DFC_H) || defined(TRACE_HEADER_MULTI_READ)
@@ -257,28 +241,25 @@ TRACE_EVENT(dfc_tx_link_status_ind,
 
 TRACE_EVENT(dfc_qmap,
 
-	TP_PROTO(const void *data, size_t len, bool in, u8 chn),
+	TP_PROTO(const void *data, size_t len, bool in),
 
-	TP_ARGS(data, len, in, chn),
+	TP_ARGS(data, len, in),
 
 	TP_STRUCT__entry(
 		__field(bool, in)
 		__field(size_t, len)
 		__dynamic_array(u8, data, len)
-		__field(u8, chn)
 	),
 
 	TP_fast_assign(
 		__entry->in = in;
 		__entry->len = len;
 		memcpy(__get_dynamic_array(data), data, len);
-		__entry->chn = chn;
 	),
 
-	TP_printk("[0x%02x] %s %s", __entry->chn,
+	TP_printk("%s [%s]",
 		__entry->in ? "<--" : "-->",
-		__print_array(__get_dynamic_array(data), __entry->len,
-			      sizeof(u8)))
+		__print_hex(__get_dynamic_array(data), __entry->len))
 );
 
 TRACE_EVENT(dfc_adjust_grant,
@@ -331,52 +312,6 @@ TRACE_EVENT(dfc_watchdog,
 
 	TP_printk("mid=%u bid=%u event=%u",
 		__entry->mux_id, __entry->bearer_id, __entry->event)
-);
-
-TRACE_EVENT(dfc_ll_switch,
-
-	TP_PROTO(const char *cmd, u8 type, u8 num_bearer, void *bearers),
-
-	TP_ARGS(cmd, type, num_bearer, bearers),
-
-	TP_STRUCT__entry(
-		__string(cmd_str, cmd)
-		__field(u8, type)
-		__field(u8, num_bearer)
-		__dynamic_array(u8, bearers, num_bearer)
-	),
-
-	TP_fast_assign(
-		__assign_str(cmd_str, cmd)
-		__entry->type = type;
-		__entry->num_bearer = num_bearer;
-		memcpy(__get_dynamic_array(bearers), bearers, num_bearer);
-	),
-
-	TP_printk("%s type=%u num_bearer=%u bearers={%s}",
-		__get_str(cmd_str),
-		__entry->type,
-		__entry->num_bearer,
-		__print_array(__get_dynamic_array(bearers),
-			      __entry->num_bearer, 1))
-);
-
-TRACE_EVENT(dfc_set_powersave_mode,
-
-	TP_PROTO(int enable),
-
-	TP_ARGS(enable),
-
-	TP_STRUCT__entry(
-		__field(int, enable)
-	),
-
-	TP_fast_assign(
-		__entry->enable = enable;
-	),
-
-	TP_printk("set powersave mode to %s",
-		__entry->enable ? "enable" : "disable")
 );
 
 #endif /* _TRACE_DFC_H */

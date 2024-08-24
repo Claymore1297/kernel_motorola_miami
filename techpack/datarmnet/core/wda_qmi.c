@@ -1,5 +1,4 @@
-/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,7 +42,7 @@ static void wda_svc_config(struct work_struct *work);
 
 #define QMI_WDA_SET_POWERSAVE_MODE_REQ_V01 0x002E
 #define QMI_WDA_SET_POWERSAVE_MODE_RESP_V01 0x002E
-#define QMI_WDA_SET_POWERSAVE_MODE_REQ_V01_MAX_MSG_LEN 48
+#define QMI_WDA_SET_POWERSAVE_MODE_REQ_V01_MAX_MSG_LEN 4
 #define QMI_WDA_SET_POWERSAVE_MODE_RESP_V01_MAX_MSG_LEN 7
 
 enum wda_powersave_config_mask_enum_v01 {
@@ -74,14 +73,6 @@ struct wda_set_powersave_config_resp_msg_v01 {
 struct wda_set_powersave_mode_req_msg_v01 {
 	/* Mandatory */
 	uint8_t powersave_control_flag;
-	/* Optional */
-	uint8_t allow_dfc_notify_valid;
-	uint8_t allow_dfc_notify;
-	uint8_t allow_bearer_id_list_valid;
-	uint8_t allow_bearer_id_list_len;
-	uint8_t allow_bearer_id_list[PS_MAX_BEARERS];
-	uint8_t auto_shut_allow_bearer_valid;
-	uint8_t auto_shut_allow_bearer;
 };
 
 struct wda_set_powersave_mode_resp_msg_v01 {
@@ -186,83 +177,6 @@ static struct qmi_elem_info wda_set_powersave_mode_req_msg_v01_ei[] = {
 		.ei_array	= NULL,
 	},
 	{
-		.data_type	= QMI_OPT_FLAG,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x10,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   allow_dfc_notify_valid),
-		.ei_array	= NULL,
-	},
-	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x10,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   allow_dfc_notify),
-		.ei_array	= NULL,
-	},
-	{
-		.data_type	= QMI_OPT_FLAG,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x11,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   allow_bearer_id_list_valid),
-		.ei_array	= NULL,
-	},
-	{
-		.data_type	= QMI_DATA_LEN,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x11,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   allow_bearer_id_list_len),
-		.ei_array	= NULL,
-	},
-	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= PS_MAX_BEARERS,
-		.elem_size	= sizeof(u8),
-		.array_type	= VAR_LEN_ARRAY,
-		.tlv_type	= 0x11,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   allow_bearer_id_list),
-		.ei_array	= NULL,
-	},
-	{
-		.data_type	= QMI_OPT_FLAG,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x12,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   auto_shut_allow_bearer_valid),
-		.ei_array	= NULL,
-	},
-	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x12,
-		.offset		= offsetof(struct
-					   wda_set_powersave_mode_req_msg_v01,
-					   auto_shut_allow_bearer),
-		.ei_array	= NULL,
-	},
-	{
 		.data_type	= QMI_EOTI,
 		.array_type	= NO_ARRAY,
 		.tlv_type	= QMI_COMMON_TLV_TYPE,
@@ -288,8 +202,7 @@ static struct qmi_elem_info wda_set_powersave_mode_resp_msg_v01_ei[] = {
 	},
 };
 
-static int wda_set_powersave_mode_req(void *wda_data, uint8_t enable,
-				      u8 num_bearers, u8 *bearer_id)
+static int wda_set_powersave_mode_req(void *wda_data, uint8_t enable)
 {
 	struct wda_qmi_data *data = (struct wda_qmi_data *)wda_data;
 	struct wda_set_powersave_mode_resp_msg_v01 *resp;
@@ -319,20 +232,6 @@ static int wda_set_powersave_mode_req(void *wda_data, uint8_t enable,
 	}
 
 	req->powersave_control_flag = enable;
-
-	if (enable && num_bearers && bearer_id &&
-	    num_bearers <= PS_MAX_BEARERS) {
-		req->allow_dfc_notify_valid = 1;
-		req->allow_dfc_notify = 1;
-
-		req->allow_bearer_id_list_valid = 1;
-		req->allow_bearer_id_list_len = num_bearers;
-		memcpy(req->allow_bearer_id_list, bearer_id, num_bearers);
-
-		req->auto_shut_allow_bearer_valid = 1;
-		req->auto_shut_allow_bearer = 1;
-	}
-
 	ret = qmi_send_request(&data->handle, &data->ssctl, &txn,
 			QMI_WDA_SET_POWERSAVE_MODE_REQ_V01,
 			QMI_WDA_SET_POWERSAVE_MODE_REQ_V01_MAX_MSG_LEN,
@@ -566,12 +465,10 @@ void wda_qmi_client_exit(void *wda_data)
 	kfree(data);
 }
 
-int wda_set_powersave_mode(void *wda_data, uint8_t enable, u8 num_bearers,
-			   u8 *bearer_id)
+int wda_set_powersave_mode(void *wda_data, uint8_t enable)
 {
 	trace_wda_set_powersave_mode(enable);
-	return wda_set_powersave_mode_req(wda_data, enable, num_bearers,
-					  bearer_id);
+	return wda_set_powersave_mode_req(wda_data, enable);
 }
 
 void wda_qmi_client_release(void *wda_data)

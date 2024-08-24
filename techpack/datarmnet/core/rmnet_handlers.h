@@ -1,5 +1,4 @@
-/* Copyright (c) 2013, 2016-2017, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2013, 2016-2017, 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +23,7 @@ enum rmnet_packet_context {
 	RMNET_WQ_CTX,
 };
 
-void rmnet_egress_handler(struct sk_buff *skb, bool low_latency);
+void rmnet_egress_handler(struct sk_buff *skb);
 void rmnet_deliver_skb(struct sk_buff *skb, struct rmnet_port *port);
 void rmnet_deliver_skb_wq(struct sk_buff *skb, struct rmnet_port *port,
 			  enum rmnet_packet_context ctx);
@@ -33,5 +32,5 @@ bool rmnet_slow_start_on(u32 hash_key);
 rx_handler_result_t _rmnet_map_ingress_handler(struct sk_buff *skb,
 					       struct rmnet_port *port);
 rx_handler_result_t rmnet_rx_handler(struct sk_buff **pskb);
-rx_handler_result_t rmnet_rx_priv_handler(struct sk_buff **pskb);
+
 #endif /* _RMNET_HANDLERS_H_ */

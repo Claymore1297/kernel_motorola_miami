@@ -1,5 +1,4 @@
-/* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,11 +36,8 @@ struct rmnet_frag_descriptor {
 	struct list_head list;
 	struct list_head frags;
 	struct net_device *dev;
-	u32 coal_bufsize;
-	u32 coal_bytes;
 	u32 len;
 	u32 hash;
-	u32 priority;
 	__be32 tcp_seq;
 	__be16 ip_id;
 	__be16 tcp_flags;
@@ -79,8 +75,7 @@ int rmnet_frag_descriptor_add_frags_from(struct rmnet_frag_descriptor *to,
 					 struct rmnet_frag_descriptor *from,
 					 u32 off, u32 len);
 int rmnet_frag_ipv6_skip_exthdr(struct rmnet_frag_descriptor *frag_desc,
-				int start, u8 *nexthdrp, __be16 *frag_offp,
-				bool *frag_hdrp);
+				int start, u8 *nexthdrp, __be16 *fragp);
 
 /* QMAP command packets */
 void rmnet_frag_command(struct rmnet_frag_descriptor *frag_desc,
@@ -90,7 +85,7 @@ int rmnet_frag_flow_command(struct rmnet_frag_descriptor *frag_desc,
 
 /* Ingress data handlers */
 void rmnet_frag_deaggregate(struct sk_buff *skb, struct rmnet_port *port,
-			    struct list_head *list, u32 priority);
+			    struct list_head *list);
 void rmnet_frag_deliver(struct rmnet_frag_descriptor *frag_desc,
 			struct rmnet_port *port);
 int rmnet_frag_process_next_hdr_packet(struct rmnet_frag_descriptor *frag_desc,

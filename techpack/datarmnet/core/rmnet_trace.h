@@ -1,22 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
-#include <linux/version.h>
+
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM rmnet
 #undef TRACE_INCLUDE_PATH
-
-#ifndef RMNET_TRACE_INCLUDE_PATH
-#if defined(CONFIG_RMNET_LA_PLATFORM)
-#define RMNET_TRACE_INCLUDE_PATH .
-#elif defined(__arch_um__)
-#define RMNET_TRACE_INCLUDE_PATH .
-#else
-#define RMNET_TRACE_INCLUDE_PATH .
-#endif /* defined(CONFIG_RMNET_LA_PLATFORM) */
-#endif /* RMNET_TRACE_INCLUDE_PATH */
-#define TRACE_INCLUDE_PATH RMNET_TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH .
 #define TRACE_INCLUDE_FILE rmnet_trace
 
 #if !defined(_TRACE_RMNET_H) || defined(TRACE_HEADER_MULTI_READ)
@@ -114,21 +103,16 @@ DEFINE_EVENT
 
 TRACE_EVENT(print_skb_gso,
 
-	TP_PROTO(struct sk_buff *skb, __be16 src, __be16 dest,
-		 u16 ip_proto, u16 xport_proto, const char *saddr, const char *daddr),
+	TP_PROTO(struct sk_buff *skb, __be16 src, __be16 dest),
 
-	TP_ARGS(skb, src, dest, ip_proto, xport_proto, saddr, daddr),
+	TP_ARGS(skb, src, dest),
 
 	TP_STRUCT__entry(
-		__field(void *, skbaddr)
+		__field(void *,	skbaddr)
 		__field(int, len)
 		__field(int, data_len)
 		__field(__be16, src)
 		__field(__be16, dest)
-		__field(u16, ip_proto)
-		__field(u16, xport_proto)
-		__string(saddr, saddr)
-		__string(daddr, daddr)
 	),
 
 	TP_fast_assign(
@@ -137,211 +121,11 @@ TRACE_EVENT(print_skb_gso,
 		__entry->data_len = skb->data_len;
 		__entry->src = src;
 		__entry->dest = dest;
-		__entry->ip_proto = ip_proto;
-		__entry->xport_proto = xport_proto;
-		__assign_str(saddr, saddr);
-		__assign_str(daddr, daddr);
 	),
 
-	TP_printk("GSO: skbaddr=%pK, len=%d, data_len=%d, [%s][%s] src=%s %u dest=%s %u",
+	TP_printk("GSO: skbaddr=%pK, len=%d, data_len=%d, src=%u, dest=%u",
 		__entry->skbaddr, __entry->len, __entry->data_len,
-		__entry->ip_proto == htons(ETH_P_IP) ? "IPv4" : "IPv6",
-		__entry->xport_proto == IPPROTO_TCP ? "TCP" : "UDP",
-		__get_str(saddr), be16_to_cpu(__entry->src),
-		__get_str(daddr), be16_to_cpu(__entry->dest))
-);
-
-DECLARE_EVENT_CLASS(print_icmp,
-
-	TP_PROTO(struct sk_buff *skb, u16 ip_proto, u8 type, __be16 sequence,
-		const char *saddr, const char *daddr),
-
-	TP_ARGS(skb, ip_proto, type, sequence, saddr, daddr),
-
-	TP_STRUCT__entry(
-		__field(void *, skbaddr)
-		__field(int, len)
-		__field(u16, ip_proto)
-		__field(u8, type)
-		__field(__be16, sequence)
-		__string(saddr, saddr)
-		__string(daddr, daddr)
-	),
-
-	TP_fast_assign(
-		__entry->skbaddr = skb;
-		__entry->len = skb->len;
-		__entry->ip_proto = ip_proto;
-		__entry->type = type;
-		__entry->sequence = sequence;
-		__assign_str(saddr, saddr);
-		__assign_str(daddr, daddr);
-	),
-
-	TP_printk("ICMP: skbaddr=%pK, len=%d, [%s] type=%u sequence=%u source=%s dest=%s",
-		__entry->skbaddr, __entry->len,
-		__entry->ip_proto == htons(ETH_P_IP) ? "IPv4" : "IPv6",
-		__entry->type, be16_to_cpu(__entry->sequence), __get_str(saddr),
-		__get_str(daddr))
-);
-
-DEFINE_EVENT
-	(print_icmp, print_icmp_tx,
-
-	TP_PROTO(struct sk_buff *skb, u16 ip_proto, u8 type, __be16 sequence,
-		const char *saddr, const char *daddr),
-
-	TP_ARGS(skb, ip_proto, type, sequence, saddr, daddr)
-);
-
-DEFINE_EVENT
-	(print_icmp, print_icmp_rx,
-
-	TP_PROTO(struct sk_buff *skb, u16 ip_proto, u8 type, __be16 sequence,
-		const char *saddr, const char *daddr),
-
-	TP_ARGS(skb, ip_proto, type, sequence, saddr, daddr)
-);
-
-DECLARE_EVENT_CLASS(print_tcp,
-
-	TP_PROTO(struct sk_buff *skb, const char *saddr, const char *daddr,
-		 struct tcphdr *tp),
-
-	TP_ARGS(skb, saddr, daddr, tp),
-
-	TP_STRUCT__entry(
-		__field(void *, skbaddr)
-		__field(int, len)
-		__string(saddr, saddr)
-		__string(daddr, daddr)
-		__field(__be16, source)
-		__field(__be16, dest)
-		__field(__be32, seq)
-		__field(__be32, ack_seq)
-		__field(u8, syn)
-		__field(u8, ack)
-		__field(u8, fin)
-	),
-
-	TP_fast_assign(
-		__entry->skbaddr = skb;
-		__entry->len = skb->len;
-		__assign_str(saddr, saddr);
-		__assign_str(daddr, daddr);
-		__entry->source = tp->source;
-		__entry->dest = tp->dest;
-		__entry->seq = tp->seq;
-		__entry->ack_seq = tp->ack_seq;
-		__entry->syn = tp->syn;
-		__entry->ack = tp->ack;
-		__entry->fin = tp->fin;
-	),
-
-	TP_printk("TCP: skbaddr=%pK, len=%d source=%s %u dest=%s %u seq=%u ack_seq=%u syn=%u ack=%u fin=%u",
-		__entry->skbaddr, __entry->len,
-		__get_str(saddr), be16_to_cpu(__entry->source),
-		__get_str(daddr), be16_to_cpu(__entry->dest),
-		be32_to_cpu(__entry->seq), be32_to_cpu(__entry->ack_seq),
-		!!__entry->syn, !!__entry->ack, !!__entry->fin)
-);
-
-DEFINE_EVENT
-	(print_tcp, print_tcp_tx,
-
-	TP_PROTO(struct sk_buff *skb, const char *saddr, const char *daddr,
-		 struct tcphdr *tp),
-
-	TP_ARGS(skb, saddr, daddr, tp)
-);
-
-DEFINE_EVENT
-	(print_tcp, print_tcp_rx,
-
-	TP_PROTO(struct sk_buff *skb, const char *saddr, const char *daddr,
-		 struct tcphdr *tp),
-
-	TP_ARGS(skb, saddr, daddr, tp)
-);
-
-DECLARE_EVENT_CLASS(print_udp,
-
-	TP_PROTO(struct sk_buff *skb, const char *saddr, const char *daddr,
-		 struct udphdr *uh, u16 ip_id),
-
-	TP_ARGS(skb, saddr, daddr, uh, ip_id),
-
-	TP_STRUCT__entry(
-		__field(void *, skbaddr)
-		__field(int, len)
-		__string(saddr, saddr)
-		__string(daddr, daddr)
-		__field(__be16, source)
-		__field(__be16, dest)
-		__field(__be16, ip_id)
-	),
-
-	TP_fast_assign(
-		__entry->skbaddr = skb;
-		__entry->len = skb->len;
-		__assign_str(saddr, saddr);
-		__assign_str(daddr, daddr);
-		__entry->source = uh->source;
-		__entry->dest = uh->dest;
-		__entry->ip_id = ip_id;
-	),
-
-	TP_printk("UDP: skbaddr=%pK, len=%d source=%s %u dest=%s %u ip_id=%u",
-		__entry->skbaddr, __entry->len,
-		__get_str(saddr), be16_to_cpu(__entry->source),
-		__get_str(daddr), be16_to_cpu(__entry->dest),
-		__entry->ip_id)
-);
-
-DEFINE_EVENT
-	(print_udp, print_udp_tx,
-
-	TP_PROTO(struct sk_buff *skb, const char *saddr, const char *daddr,
-		 struct udphdr *uh, u16 ip_id),
-
-	TP_ARGS(skb, saddr, daddr, uh, ip_id)
-);
-
-DEFINE_EVENT
-	(print_udp, print_udp_rx,
-
-	TP_PROTO(struct sk_buff *skb, const char *saddr, const char *daddr,
-		 struct udphdr *uh, u16 ip_id),
-
-	TP_ARGS(skb, saddr, daddr, uh, ip_id)
-);
-
-TRACE_EVENT(print_pfn,
-
-	TP_PROTO(struct sk_buff *skb, unsigned long *pfn_list, int num_elements),
-
-	TP_ARGS(skb, pfn_list, num_elements),
-
-	TP_STRUCT__entry(
-		__field(void *, skbaddr)
-		__field(int, num_elements)
-		__dynamic_array(unsigned long, pfn_list, num_elements)
-	),
-
-	TP_fast_assign(
-		__entry->skbaddr = skb;
-		__entry->num_elements = num_elements;
-		memcpy(__get_dynamic_array(pfn_list), pfn_list,
-		       num_elements * sizeof(*pfn_list));
-	),
-
-	TP_printk("skbaddr=%pK count=%d pfn=%s",
-		  __entry->skbaddr,
-		  __entry->num_elements,
-		  __print_array(__get_dynamic_array(pfn_list),
-				__entry->num_elements,
-				sizeof(unsigned long))
-	)
+		be16_to_cpu(__entry->src), be16_to_cpu(__entry->dest))
 );
 
 /*****************************************************************************/

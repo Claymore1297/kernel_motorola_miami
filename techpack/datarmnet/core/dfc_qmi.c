@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -45,7 +45,6 @@ struct dfc_ack_cmd {
 } __aligned(1);
 
 static void dfc_svc_init(struct work_struct *work);
-extern int dfc_ps_ext;
 
 /* **************************************************** */
 #define DFC_SERVICE_ID_V01 0x4E
@@ -777,11 +776,8 @@ dfc_indication_register_req(struct qmi_handle *dfc_handle,
 
 	req->report_flow_status_valid = 1;
 	req->report_flow_status = reg;
-
-	if (!dfc_ps_ext) {
-		req->report_tx_link_status_valid = 1;
-		req->report_tx_link_status = reg;
-	}
+	req->report_tx_link_status_valid = 1;
+	req->report_tx_link_status = reg;
 
 	ret = qmi_send_request(dfc_handle, ssctl, &txn,
 			       QMI_DFC_INDICATION_REGISTER_REQ_V01,
@@ -917,7 +913,7 @@ dfc_send_ack(struct net_device *dev, u8 bearer_id, u16 seq, u8 mux_id, u8 type)
 	trace_dfc_qmap_cmd(mux_id, bearer_id, seq, type, qos->tran_num);
 	qos->tran_num++;
 
-	rmnet_map_tx_qmap_cmd(skb, RMNET_CH_DEFAULT, true);
+	rmnet_map_tx_qmap_cmd(skb);
 }
 
 int dfc_bearer_flow_ctl(struct net_device *dev,
@@ -1027,14 +1023,6 @@ static int dfc_update_fc_map(struct net_device *dev, struct qos_info *qos,
 		if (itm->tx_off  && fc_info->num_bytes > 0)
 			return 0;
 
-		if (fc_info->ll_status &&
-		    itm->ch_switch.current_ch != RMNET_CH_LL) {
-			itm->ch_switch.current_ch = RMNET_CH_LL;
-			itm->ch_switch.auto_switched = true;
-			if (itm->mq_idx < MAX_MQ_NUM)
-				qos->mq[itm->mq_idx].is_ll_ch = RMNET_CH_LL;
-		}
-
 		/* Adjuste grant for query */
 		if (dfc_qmap && is_query) {
 			adjusted_grant = dfc_adjust_grant(itm, fc_info);
@@ -1134,18 +1122,9 @@ void dfc_do_burst_flow_control(struct dfc_qmi_data *dfc,
 
 		spin_lock_bh(&qos->qos_lock);
 
-		/* In powersave, change grant to 1 if it is a enable */
 		if (qmi_rmnet_ignore_grant(dfc->rmnet_port)) {
-			if (flow_status->num_bytes) {
-				flow_status->num_bytes = DEFAULT_GRANT;
-				flow_status->seq_num = 0;
-				/* below is to reset bytes-in-flight */
-				flow_status->rx_bytes_valid = 1;
-				flow_status->rx_bytes = 0xFFFFFFFF;
-			} else {
-				spin_unlock_bh(&qos->qos_lock);
-				continue;
-			}
+			spin_unlock_bh(&qos->qos_lock);
+			continue;
 		}
 
 		if (unlikely(flow_status->bearer_id == 0xFF))

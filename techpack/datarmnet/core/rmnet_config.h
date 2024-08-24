@@ -1,5 +1,4 @@
 /* Copyright (c) 2013-2014, 2016-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,23 +20,11 @@
 #define _RMNET_CONFIG_H_
 
 #define RMNET_MAX_LOGICAL_EP 255
-#define RMNET_MAX_VEID 16
+#define RMNET_MAX_VEID 4
 
 #define RMNET_SHS_STMP_ALL BIT(0)
 #define RMNET_SHS_NO_PSH BIT(1)
 #define RMNET_SHS_NO_DLMKR BIT(2)
-
-#define RMNET_LLM(prio) ((prio) == 0xDA001A) /* qmipriod */
-
-#define RMNET_APS_MAJOR 0x9B6D
-#define RMNET_APS_LLC_MASK 0x0100
-#define RMNET_APS_LLB_MASK 0x0200
-
-#define RMNET_APS_LLC(prio) \
-	(((prio) >> 16 == RMNET_APS_MAJOR) && ((prio) & RMNET_APS_LLC_MASK))
-
-#define RMNET_APS_LLB(prio) \
-        (((prio) >> 16 == RMNET_APS_MAJOR) && ((prio) & RMNET_APS_LLB_MASK))
 
 struct rmnet_shs_clnt_s {
 	u16 config;
@@ -73,11 +60,6 @@ struct rmnet_port_priv_stats {
 	u64 dl_trl_last_seq;
 	u64 dl_trl_count;
 	struct rmnet_agg_stats agg;
-	u64 dl_chain_stat[7];
-	u64 dl_frag_stat_1;
-	u64 dl_frag_stat[5];
-	u64 pb_marker_count;
-	u64 pb_marker_seq;
 };
 
 struct rmnet_egress_agg_params {
@@ -86,31 +68,6 @@ struct rmnet_egress_agg_params {
 	u8 agg_features;
 	u32 agg_time;
 };
-
-enum {
-	RMNET_DEFAULT_AGG_STATE,
-	RMNET_LL_AGG_STATE,
-	RMNET_MAX_AGG_STATE,
-};
-
-struct rmnet_aggregation_state {
-	struct rmnet_egress_agg_params params;
-	struct timespec64 agg_time;
-	struct timespec64 agg_last;
-	struct hrtimer hrtimer;
-	struct work_struct agg_wq;
-	/* Protect aggregation related elements */
-	spinlock_t agg_lock;
-	struct sk_buff *agg_skb;
-	int (*send_agg_skb)(struct sk_buff *skb);
-	int agg_state;
-	u8 agg_count;
-	u8 agg_size_order;
-	struct list_head agg_list;
-	struct rmnet_agg_page *agg_head;
-	struct rmnet_agg_stats *stats;
-};
-
 
 struct rmnet_agg_page {
 	struct list_head list;
@@ -130,7 +87,21 @@ struct rmnet_port {
 	struct net_device *bridge_ep;
 	void *rmnet_perf;
 
-	struct rmnet_aggregation_state agg_state[RMNET_MAX_AGG_STATE];
+	struct rmnet_egress_agg_params egress_agg_params;
+
+	/* Protect aggregation related elements */
+	spinlock_t agg_lock;
+
+	struct sk_buff *agg_skb;
+	int agg_state;
+	u8 agg_count;
+	struct timespec64 agg_time;
+	struct timespec64 agg_last;
+	struct hrtimer hrtimer;
+	struct work_struct agg_wq;
+	u8 agg_size_order;
+	struct list_head agg_list;
+	struct rmnet_agg_page *agg_head;
 
 	void *qmi_info;
 
@@ -138,8 +109,6 @@ struct rmnet_port {
 	struct list_head dl_list;
 	struct rmnet_port_priv_stats stats;
 	int dl_marker_flush;
-	/* Pending Byte Marker */
-	struct list_head pb_list;
 	/* Port Config for shs */
 	struct rmnet_shs_clnt_s shs_cfg;
 	struct rmnet_shs_clnt_s phy_shs_cfg;
@@ -206,14 +175,6 @@ struct rmnet_priv_stats {
 	u64 csum_hw;
 	struct rmnet_coal_stats coal;
 	u64 ul_prio;
-	u64 tso_pkts;
-	u64 tso_arriv_errs;
-	u64 tso_segment_success;
-	u64 tso_segment_fail;
-	u64 tso_segment_skip;
-	u64 ll_tso_segs;
-	u64 ll_tso_errs;
-	u64 aps_prio;
 };
 
 struct rmnet_priv {
@@ -223,7 +184,6 @@ struct rmnet_priv {
 	struct gro_cells gro_cells;
 	struct rmnet_priv_stats stats;
 	void __rcu *qos_info;
-	char aps_cb[16];
 };
 
 enum rmnet_dl_marker_prio {

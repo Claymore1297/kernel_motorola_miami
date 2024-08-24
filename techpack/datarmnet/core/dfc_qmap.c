@@ -1,19 +1,51 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <net/pkt_sched.h>
 #include <linux/module.h>
-#include "rmnet_qmap.h"
+#include "rmnet_ctl.h"
 #include "dfc_defs.h"
 #include "rmnet_qmi.h"
 #include "qmi_rmnet.h"
 #include "dfc.h"
-#include "rmnet_map.h"
 
 #define QMAP_DFC_VER		1
+
+#define QMAP_CMD_DONE		-1
+
+#define QMAP_CMD_REQUEST	0
+#define QMAP_CMD_ACK		1
+#define QMAP_CMD_UNSUPPORTED	2
+#define QMAP_CMD_INVALID	3
+
+#define QMAP_DFC_CONFIG		10
+#define QMAP_DFC_IND		11
+#define QMAP_DFC_QUERY		12
+#define QMAP_DFC_END_MARKER	13
+
+struct qmap_hdr {
+	u8	cd_pad;
+	u8	mux_id;
+	__be16	pkt_len;
+} __aligned(1);
+
+#define QMAP_HDR_LEN sizeof(struct qmap_hdr)
+
+struct qmap_cmd_hdr {
+	u8	pad_len:6;
+	u8	reserved_bit:1;
+	u8	cd_bit:1;
+	u8	mux_id;
+	__be16	pkt_len;
+	u8	cmd_name;
+	u8	cmd_type:2;
+	u8	reserved:6;
+	u16	reserved2;
+	__be32	tx_id;
+} __aligned(1);
 
 struct qmap_dfc_config {
 	struct qmap_cmd_hdr	hdr;
@@ -40,8 +72,7 @@ struct qmap_dfc_ind {
 	u8			bearer_id;
 	u8			tcp_bidir:1;
 	u8			bearer_status:3;
-	u8			ll_status:1;
-	u8			reserved4:3;
+	u8			reserved4:4;
 	__be32			grant;
 	__be32			rx_bytes;
 	u32			reserved6;
@@ -92,56 +123,48 @@ struct qmap_dfc_end_marker_cnf {
 	u32			reserved4;
 } __aligned(1);
 
-struct qmapv5_cmd_hdr {
-	u8	pad_len:6;
-	u8	next_hdr:1;
-	u8	cd_bit:1;
-	u8	mux_id;
-	__be16	pkt_len;
-	struct rmnet_map_v5_csum_header csum_hdr;
-	u8	cmd_name;
-	u8	cmd_type:2;
-	u8	reserved:6;
-	u16	reserved2;
-	__be32	tx_id;
-} __aligned(1);
-
-struct qmapv5_dfc_end_marker_cnf {
-	struct qmapv5_cmd_hdr	hdr;
-	u8			cmd_ver;
-	u8			reserved;
-	u8			bearer_id;
-	u8			reserved2;
-	u16			reserved3;
-	__be16			seq_num;
-	u32			reserved4;
-} __aligned(1);
-
-struct qmap_dfc_powersave_req {
-	struct qmap_cmd_hdr	hdr;
-	u8			cmd_ver;
-	u8			allow:1;
-	u8			autoshut:1;
-	u8			reserved:6;
-	u8			reserved2;
-	u8			mode:1;
-	u8			reserved3:7;
-	__be32			ep_type;
-	__be32			iface_id;
-	u8			num_bearers;
-	u8			bearer_id[PS_MAX_BEARERS];
-	u8			reserved4[3];
-} __aligned(1);
-
 static struct dfc_flow_status_ind_msg_v01 qmap_flow_ind;
 static struct dfc_tx_link_status_ind_msg_v01 qmap_tx_ind;
 static struct dfc_qmi_data __rcu *qmap_dfc_data;
+static atomic_t qmap_txid;
+static void *rmnet_ctl_handle;
 static bool dfc_config_acked;
+
+static struct rmnet_ctl_client_if *rmnet_ctl;
 
 static void dfc_qmap_send_config(struct dfc_qmi_data *data);
 static void dfc_qmap_send_end_marker_cnf(struct qos_info *qos,
-					 struct rmnet_bearer_map *bearer,
-					 u16 seq, u32 tx_id);
+					 u8 bearer_id, u16 seq, u32 tx_id);
+
+static void dfc_qmap_send_cmd(struct sk_buff *skb)
+{
+	trace_dfc_qmap(skb->data, skb->len, false);
+
+	if (unlikely(!rmnet_ctl || !rmnet_ctl->send)) {
+		kfree_skb(skb);
+		return;
+	}
+
+	if (rmnet_ctl->send(rmnet_ctl_handle, skb))
+		pr_err("Failed to send to rmnet ctl\n");
+}
+
+static void dfc_qmap_send_inband_ack(struct dfc_qmi_data *dfc,
+				     struct sk_buff *skb)
+{
+	struct qmap_cmd_hdr *cmd;
+
+	cmd = (struct qmap_cmd_hdr *)skb->data;
+
+	skb->protocol = htons(ETH_P_MAP);
+	skb->dev = rmnet_get_real_dev(dfc->rmnet_port);
+
+	if (likely(rmnet_ctl && rmnet_ctl->log))
+		rmnet_ctl->log(RMNET_CTL_LOG_DEBUG, "TXI", 0,
+			       skb->data, skb->len);
+	trace_dfc_qmap(skb->data, skb->len, false);
+	dev_queue_xmit(skb);
+}
 
 static int dfc_qmap_handle_ind(struct dfc_qmi_data *dfc,
 			       struct sk_buff *skb)
@@ -174,7 +197,6 @@ static int dfc_qmap_handle_ind(struct dfc_qmi_data *dfc,
 	qmap_flow_ind.flow_status[0].bearer_id = cmd->bearer_id;
 	qmap_flow_ind.flow_status[0].num_bytes = ntohl(cmd->grant);
 	qmap_flow_ind.flow_status[0].seq_num = ntohs(cmd->seq_num);
-	qmap_flow_ind.flow_status[0].ll_status = cmd->ll_status;
 
 	if (cmd->rx_bytes_valid) {
 		qmap_flow_ind.flow_status[0].rx_bytes_valid = 1;
@@ -235,40 +257,33 @@ static int dfc_qmap_handle_query_resp(struct dfc_qmi_data *dfc,
 	return QMAP_CMD_DONE;
 }
 
-static int dfc_qmap_set_end_marker(struct dfc_qmi_data *dfc, u8 mux_id,
-				   u8 bearer_id, u16 seq_num, u32 tx_id)
+static void dfc_qmap_set_end_marker(struct dfc_qmi_data *dfc, u8 mux_id,
+				    u8 bearer_id, u16 seq_num, u32 tx_id)
 {
 	struct net_device *dev;
 	struct qos_info *qos;
 	struct rmnet_bearer_map *bearer;
-	int rc = QMAP_CMD_ACK;
 
 	dev = rmnet_get_rmnet_dev(dfc->rmnet_port, mux_id);
 	if (!dev)
-		return rc;
+		return;
 
 	qos = (struct qos_info *)rmnet_get_qos_pt(dev);
 	if (!qos)
-		return rc;
+		return;
 
 	spin_lock_bh(&qos->qos_lock);
 
 	bearer = qmi_rmnet_get_bearer_map(qos, bearer_id);
-	if (!bearer) {
-		spin_unlock_bh(&qos->qos_lock);
-		return rc;
-	}
 
-	if (bearer->last_seq == seq_num && bearer->grant_size) {
+	if (bearer && bearer->last_seq == seq_num && bearer->grant_size) {
 		bearer->ack_req = 1;
 		bearer->ack_txid = tx_id;
 	} else {
-		dfc_qmap_send_end_marker_cnf(qos, bearer, seq_num, tx_id);
+		dfc_qmap_send_end_marker_cnf(qos, bearer_id, seq_num, tx_id);
 	}
 
 	spin_unlock_bh(&qos->qos_lock);
-
-	return QMAP_CMD_DONE;
 }
 
 static int dfc_qmap_handle_end_marker_req(struct dfc_qmi_data *dfc,
@@ -280,32 +295,48 @@ static int dfc_qmap_handle_end_marker_req(struct dfc_qmi_data *dfc,
 		return QMAP_CMD_INVALID;
 
 	cmd = (struct qmap_dfc_end_marker_req *)skb->data;
-	return dfc_qmap_set_end_marker(dfc, cmd->hdr.mux_id, cmd->bearer_id,
-				       ntohs(cmd->seq_num),
-				       ntohl(cmd->hdr.tx_id));
+
+	dfc_qmap_set_end_marker(dfc, cmd->hdr.mux_id, cmd->bearer_id,
+				ntohs(cmd->seq_num), ntohl(cmd->hdr.tx_id));
+
+	return QMAP_CMD_DONE;
 }
 
-int dfc_qmap_cmd_handler(struct sk_buff *skb)
+static void dfc_qmap_cmd_handler(struct sk_buff *skb)
 {
 	struct qmap_cmd_hdr *cmd;
 	struct dfc_qmi_data *dfc;
 	int rc = QMAP_CMD_DONE;
 
+	if (!skb)
+		return;
+
+	trace_dfc_qmap(skb->data, skb->len, true);
+
+	if (skb->len < sizeof(struct qmap_cmd_hdr))
+		goto free_skb;
+
 	cmd = (struct qmap_cmd_hdr *)skb->data;
+	if (!cmd->cd_bit || skb->len != ntohs(cmd->pkt_len) + QMAP_HDR_LEN)
+		goto free_skb;
 
 	if (cmd->cmd_name == QMAP_DFC_QUERY) {
 		if (cmd->cmd_type != QMAP_CMD_ACK)
-			return rc;
+			goto free_skb;
 	} else if (cmd->cmd_type != QMAP_CMD_REQUEST) {
 		if (cmd->cmd_type == QMAP_CMD_ACK &&
 		    cmd->cmd_name == QMAP_DFC_CONFIG)
 			dfc_config_acked = true;
-		return rc;
+		goto free_skb;
 	}
 
+	rcu_read_lock();
+
 	dfc = rcu_dereference(qmap_dfc_data);
-	if (!dfc || READ_ONCE(dfc->restart_state))
-		return rc;
+	if (!dfc || READ_ONCE(dfc->restart_state)) {
+		rcu_read_unlock();
+		goto free_skb;
+	}
 
 	/* Re-send DFC config once if needed */
 	if (unlikely(!dfc_config_acked)) {
@@ -328,11 +359,25 @@ int dfc_qmap_cmd_handler(struct sk_buff *skb)
 		break;
 
 	default:
-		if (cmd->cmd_type == QMAP_CMD_REQUEST)
-			rc = QMAP_CMD_UNSUPPORTED;
+		rc = QMAP_CMD_UNSUPPORTED;
 	}
 
-	return rc;
+	/* Send ack */
+	if (rc != QMAP_CMD_DONE) {
+		cmd->cmd_type = rc;
+		if (cmd->cmd_name == QMAP_DFC_IND)
+			dfc_qmap_send_inband_ack(dfc, skb);
+		else
+			dfc_qmap_send_cmd(skb);
+
+		rcu_read_unlock();
+		return;
+	}
+
+	rcu_read_unlock();
+
+free_skb:
+	kfree_skb(skb);
 }
 
 static void dfc_qmap_send_config(struct dfc_qmi_data *data)
@@ -354,7 +399,7 @@ static void dfc_qmap_send_config(struct dfc_qmi_data *data)
 	dfc_config->hdr.pkt_len = htons(len - QMAP_HDR_LEN);
 	dfc_config->hdr.cmd_name = QMAP_DFC_CONFIG;
 	dfc_config->hdr.cmd_type = QMAP_CMD_REQUEST;
-	dfc_config->hdr.tx_id = htonl(rmnet_qmap_next_txid());
+	dfc_config->hdr.tx_id = htonl(atomic_inc_return(&qmap_txid));
 
 	dfc_config->cmd_ver = QMAP_DFC_VER;
 	dfc_config->cmd_id = QMAP_DFC_IND;
@@ -362,7 +407,7 @@ static void dfc_qmap_send_config(struct dfc_qmi_data *data)
 	dfc_config->ep_type = htonl(data->svc.ep_type);
 	dfc_config->iface_id = htonl(data->svc.iface_id);
 
-	rmnet_qmap_send(skb, RMNET_CH_CTL, false);
+	dfc_qmap_send_cmd(skb);
 }
 
 static void dfc_qmap_send_query(u8 mux_id, u8 bearer_id)
@@ -384,104 +429,48 @@ static void dfc_qmap_send_query(u8 mux_id, u8 bearer_id)
 	dfc_query->hdr.pkt_len = htons(len - QMAP_HDR_LEN);
 	dfc_query->hdr.cmd_name = QMAP_DFC_QUERY;
 	dfc_query->hdr.cmd_type = QMAP_CMD_REQUEST;
-	dfc_query->hdr.tx_id = htonl(rmnet_qmap_next_txid());
+	dfc_query->hdr.tx_id = htonl(atomic_inc_return(&qmap_txid));
 
 	dfc_query->cmd_ver = QMAP_DFC_VER;
 	dfc_query->bearer_id = bearer_id;
 
-	rmnet_qmap_send(skb, RMNET_CH_CTL, false);
+	dfc_qmap_send_cmd(skb);
 }
 
 static void dfc_qmap_send_end_marker_cnf(struct qos_info *qos,
-					 struct rmnet_bearer_map *bearer,
-					 u16 seq, u32 tx_id)
+					 u8 bearer_id, u16 seq, u32 tx_id)
 {
 	struct sk_buff *skb;
-	struct qmapv5_dfc_end_marker_cnf *em_cnf;
-	unsigned int len = sizeof(struct qmapv5_dfc_end_marker_cnf);
+	struct qmap_dfc_end_marker_cnf *em_cnf;
+	unsigned int len = sizeof(struct qmap_dfc_end_marker_cnf);
 
 	skb = alloc_skb(len, GFP_ATOMIC);
 	if (!skb)
 		return;
 
-	em_cnf = (struct qmapv5_dfc_end_marker_cnf *)skb_put(skb, len);
+	em_cnf = (struct qmap_dfc_end_marker_cnf *)skb_put(skb, len);
 	memset(em_cnf, 0, len);
 
 	em_cnf->hdr.cd_bit = 1;
-	em_cnf->hdr.next_hdr = 1;
 	em_cnf->hdr.mux_id = qos->mux_id;
-	em_cnf->hdr.pkt_len = htons(len -
-				    (QMAP_HDR_LEN +
-				     sizeof(struct rmnet_map_v5_csum_header)));
-	em_cnf->hdr.csum_hdr.header_type = RMNET_MAP_HEADER_TYPE_CSUM_OFFLOAD;
+	em_cnf->hdr.pkt_len = htons(len - QMAP_HDR_LEN);
 	em_cnf->hdr.cmd_name = QMAP_DFC_END_MARKER;
 	em_cnf->hdr.cmd_type = QMAP_CMD_ACK;
 	em_cnf->hdr.tx_id = htonl(tx_id);
 
 	em_cnf->cmd_ver = QMAP_DFC_VER;
-	em_cnf->bearer_id = bearer->bearer_id;
+	em_cnf->bearer_id = bearer_id;
 	em_cnf->seq_num = htons(seq);
 
-	rmnet_qmap_send(skb, bearer->ch_switch.current_ch, true);
-}
-
-static int dfc_qmap_send_powersave(u8 enable, u8 num_bearers, u8 *bearer_id)
-{
-	struct sk_buff *skb;
-	struct qmap_dfc_powersave_req *dfc_powersave;
-	unsigned int len = sizeof(struct qmap_dfc_powersave_req);
-	struct dfc_qmi_data *dfc;
-	u32 ep_type = 0;
-	u32 iface_id = 0;
-
-	rcu_read_lock();
-	dfc = rcu_dereference(qmap_dfc_data);
-	if (dfc) {
-		ep_type = dfc->svc.ep_type;
-		iface_id = dfc->svc.iface_id;
-	} else {
-		rcu_read_unlock();
-		return -EINVAL;
-	}
-	rcu_read_unlock();
-
-	skb = alloc_skb(len, GFP_ATOMIC);
-	if (!skb)
-		return -ENOMEM;
-
 	skb->protocol = htons(ETH_P_MAP);
-	dfc_powersave = (struct qmap_dfc_powersave_req *)skb_put(skb, len);
-	memset(dfc_powersave, 0, len);
+	skb->dev = qos->real_dev;
 
-	dfc_powersave->hdr.cd_bit = 1;
-	dfc_powersave->hdr.mux_id = 0;
-	dfc_powersave->hdr.pkt_len = htons(len - QMAP_HDR_LEN);
-	dfc_powersave->hdr.cmd_name = QMAP_DFC_POWERSAVE;
-	dfc_powersave->hdr.cmd_type = QMAP_CMD_REQUEST;
-	dfc_powersave->hdr.tx_id =  htonl(rmnet_qmap_next_txid());
-
-	dfc_powersave->cmd_ver = 3;
-	dfc_powersave->mode = enable ? 1 : 0;
-
-	if (enable && num_bearers) {
-		if (unlikely(num_bearers > PS_MAX_BEARERS))
-			num_bearers = PS_MAX_BEARERS;
-		dfc_powersave->allow = 1;
-		dfc_powersave->autoshut = 1;
-		dfc_powersave->num_bearers = num_bearers;
-		memcpy(dfc_powersave->bearer_id, bearer_id, num_bearers);
-	}
-
-	dfc_powersave->ep_type = htonl(ep_type);
-	dfc_powersave->iface_id = htonl(iface_id);
-
-	return rmnet_qmap_send(skb, RMNET_CH_CTL, false);
-}
-
-int dfc_qmap_set_powersave(u8 enable, u8 num_bearers, u8 *bearer_id)
-{
-	trace_dfc_set_powersave_mode(enable);
-	return dfc_qmap_send_powersave(enable, num_bearers, bearer_id);
+	/* This cmd needs to be sent in-band */
+	if (likely(rmnet_ctl && rmnet_ctl->log))
+		rmnet_ctl->log(RMNET_CTL_LOG_INFO, "TXI", 0,
+			       skb->data, skb->len);
+	trace_dfc_qmap(skb->data, skb->len, false);
+	rmnet_map_tx_qmap_cmd(skb);
 }
 
 void dfc_qmap_send_ack(struct qos_info *qos, u8 bearer_id, u16 seq, u8 type)
@@ -491,12 +480,16 @@ void dfc_qmap_send_ack(struct qos_info *qos, u8 bearer_id, u16 seq, u8 type)
 	if (type == DFC_ACK_TYPE_DISABLE) {
 		bearer = qmi_rmnet_get_bearer_map(qos, bearer_id);
 		if (bearer)
-			dfc_qmap_send_end_marker_cnf(qos, bearer,
+			dfc_qmap_send_end_marker_cnf(qos, bearer_id,
 						     seq, bearer->ack_txid);
 	} else if (type == DFC_ACK_TYPE_THRESHOLD) {
 		dfc_qmap_send_query(qos->mux_id, bearer_id);
 	}
 }
+
+static struct rmnet_ctl_client_hooks cb = {
+	.ctl_dl_client_hook = dfc_qmap_cmd_handler,
+};
 
 int dfc_qmap_client_init(void *port, int index, struct svc_info *psvc,
 			 struct qmi_info *qmi)
@@ -522,22 +515,29 @@ int dfc_qmap_client_init(void *port, int index, struct svc_info *psvc,
 	qmi->dfc_clients[index] = (void *)data;
 	rcu_assign_pointer(qmap_dfc_data, data);
 
-	rmnet_qmap_init(port);
+	atomic_set(&qmap_txid, 0);
+
+	rmnet_ctl = rmnet_ctl_if();
+	if (!rmnet_ctl) {
+		pr_err("rmnet_ctl module not loaded\n");
+		goto out;
+	}
+
+	if (rmnet_ctl->reg)
+		rmnet_ctl_handle = rmnet_ctl->reg(&cb);
+
+	if (!rmnet_ctl_handle)
+		pr_err("Failed to register with rmnet ctl\n");
 
 	trace_dfc_client_state_up(data->index, data->svc.instance,
 				  data->svc.ep_type, data->svc.iface_id);
 
 	pr_info("DFC QMAP init\n");
 
-	/* Currently if powersave ext is enabled, no need to do dfc config
-	 * which only enables tx_info */
-	if (qmi->ps_ext) {
-		dfc_config_acked = true;
-	} else {
-		dfc_config_acked = false;
-		dfc_qmap_send_config(data);
-	}
+	dfc_config_acked = false;
+	dfc_qmap_send_config(data);
 
+out:
 	return 0;
 }
 
@@ -552,13 +552,16 @@ void dfc_qmap_client_exit(void *dfc_data)
 
 	trace_dfc_client_state_down(data->index, 0);
 
-	rmnet_qmap_exit();
+	if (rmnet_ctl && rmnet_ctl->dereg)
+		rmnet_ctl->dereg(rmnet_ctl_handle);
+	rmnet_ctl_handle = NULL;
 
 	WRITE_ONCE(data->restart_state, 1);
 	RCU_INIT_POINTER(qmap_dfc_data, NULL);
 	synchronize_rcu();
 
 	kfree(data);
+	rmnet_ctl = NULL;
 
 	pr_info("DFC QMAP exit\n");
 }

@@ -1,5 +1,4 @@
-/* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,7 +39,6 @@ enum rmnet_map_commands {
 	RMNET_MAP_COMMAND_FLOW_ENABLE,
 	RMNET_MAP_COMMAND_FLOW_START = 7,
 	RMNET_MAP_COMMAND_FLOW_END = 8,
-	RMNET_MAP_COMMAND_PB_BYTES = 35,
 	/* These should always be the last 2 elements */
 	RMNET_MAP_COMMAND_UNKNOWN,
 	RMNET_MAP_COMMAND_ENUM_LENGTH
@@ -50,7 +48,6 @@ enum rmnet_map_v5_header_type {
 	RMNET_MAP_HEADER_TYPE_UNKNOWN,
 	RMNET_MAP_HEADER_TYPE_COALESCING = 0x1,
 	RMNET_MAP_HEADER_TYPE_CSUM_OFFLOAD = 0x2,
-	RMNET_MAP_HEADER_TYPE_TSO = 0x3,
 	RMNET_MAP_HEADER_TYPE_ENUM_LENGTH
 };
 
@@ -83,8 +80,7 @@ struct rmnet_map_header {
 struct rmnet_map_v5_csum_header {
 	u8  next_hdr:1;
 	u8  header_type:7;
-	u8  hw_reserved:4;
-	u8  aps_prio:1;
+	u8  hw_reserved:5;
 	u8  priority:1;
 	u8  hw_reserved_bit:1;
 	u8  csum_valid_required:1;
@@ -113,16 +109,6 @@ struct rmnet_map_v5_coal_header {
 	u8  virtual_channel_id:4;
 
 	struct rmnet_map_v5_nl_pair nl_pairs[RMNET_MAP_V5_MAX_NLOS];
-} __aligned(1);
-
-struct rmnet_map_v5_tso_header {
-	u8  next_hdr:1;
-	u8  header_type:7;
-	u8  hw_reserved:5;
-	u8  priority:1;
-	u8  zero_csum:1;
-	u8  ip_id_cfg:1;
-	__be16 segment_size;
 } __aligned(1);
 
 /* QMAP v4 headers */
@@ -165,29 +151,6 @@ struct rmnet_map_flow_info_be {
 	u32 bytes;
 	u32 pkts;
 } __aligned(1);
-
-struct rmnet_map_pb_ind_hdr {
-	union {
-		struct {
-			u32 seq_num;
-			u32 start_end_seq_num;
-			u32 row_bytes_pending;
-			u32 fc_bytes_pending;
-		} le __aligned(1);
-		struct {
-			u32 seq_num;
-			u32 start_end_seq_num;
-			u32 row_bytes_pending;
-			u32 fc_bytes_pending;
-		} be __aligned(1);
-	} __aligned(1);
-} __aligned(1);
-
-struct rmnet_map_pb_ind {
-	u8 priority;
-	void (*pb_ind_handler)(struct rmnet_map_pb_ind_hdr *pbhdr);
-	struct list_head list;
-};
 
 struct rmnet_map_dl_ind_hdr {
 	union {
@@ -297,20 +260,17 @@ int rmnet_map_process_next_hdr_packet(struct sk_buff *skb,
 				      struct sk_buff_head *list,
 				      u16 len);
 int rmnet_map_tx_agg_skip(struct sk_buff *skb, int offset);
-void rmnet_map_tx_aggregate(struct sk_buff *skb, struct rmnet_port *port,
-			    bool low_latency);
+void rmnet_map_tx_aggregate(struct sk_buff *skb, struct rmnet_port *port);
 void rmnet_map_tx_aggregate_init(struct rmnet_port *port);
 void rmnet_map_tx_aggregate_exit(struct rmnet_port *port);
-void rmnet_map_update_ul_agg_config(struct rmnet_aggregation_state *state,
-				    u16 size, u8 count, u8 features, u32 time);
+void rmnet_map_update_ul_agg_config(struct rmnet_port *port, u16 size,
+				    u8 count, u8 features, u32 time);
 void rmnet_map_dl_hdr_notify_v2(struct rmnet_port *port,
 				struct rmnet_map_dl_ind_hdr *dl_hdr,
 				struct rmnet_map_control_command_header *qcmd);
 void rmnet_map_dl_trl_notify_v2(struct rmnet_port *port,
 				struct rmnet_map_dl_ind_trl *dltrl,
 				struct rmnet_map_control_command_header *qcmd);
-void rmnet_map_pb_ind_notify(struct rmnet_port *port,
-			     struct rmnet_map_pb_ind_hdr *pbhdr);
 int rmnet_map_flow_command(struct sk_buff *skb,
 			   struct rmnet_port *port,
 			   bool rmnet_perf);
@@ -319,13 +279,5 @@ int rmnet_map_dl_ind_register(struct rmnet_port *port,
 			      struct rmnet_map_dl_ind *dl_ind);
 int rmnet_map_dl_ind_deregister(struct rmnet_port *port,
 				struct rmnet_map_dl_ind *dl_ind);
-int rmnet_map_pb_ind_register(struct rmnet_port *port,
-			      struct rmnet_map_pb_ind *pb_ind);
-int rmnet_map_pb_ind_deregister(struct rmnet_port *port,
-				struct rmnet_map_pb_ind *pb_ind);
 void rmnet_map_cmd_exit(struct rmnet_port *port);
-void rmnet_map_tx_qmap_cmd(struct sk_buff *qmap_skb, u8 ch, bool flush);
-void rmnet_map_send_agg_skb(struct rmnet_aggregation_state *state);
-int rmnet_map_add_tso_header(struct sk_buff *skb, struct rmnet_port *port,
-			      struct net_device *orig_dev);
 #endif /* _RMNET_MAP_H_ */

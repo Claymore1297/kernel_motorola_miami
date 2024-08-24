@@ -1,5 +1,5 @@
-/* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,46 +20,17 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
-#include <linux/inet.h>
-#include <linux/icmp.h>
-#include <linux/icmpv6.h>
-#include <linux/ethtool.h>
 #include <net/pkt_sched.h>
-#include <net/ipv6.h>
 #include "rmnet_config.h"
 #include "rmnet_handlers.h"
 #include "rmnet_private.h"
 #include "rmnet_map.h"
 #include "rmnet_vnd.h"
 #include "rmnet_genl.h"
-#include "rmnet_ll.h"
-#include "rmnet_ctl.h"
 
 #include "qmi_rmnet.h"
 #include "rmnet_qmi.h"
 #include "rmnet_trace.h"
-
-typedef void (*rmnet_perf_tether_egress_hook_t)(struct sk_buff *skb);
-rmnet_perf_tether_egress_hook_t rmnet_perf_tether_egress_hook __rcu __read_mostly;
-EXPORT_SYMBOL(rmnet_perf_tether_egress_hook);
-
-typedef void (*rmnet_perf_egress_hook1_t)(struct sk_buff *skb);
-rmnet_perf_egress_hook1_t rmnet_perf_egress_hook1 __rcu __read_mostly;
-EXPORT_SYMBOL(rmnet_perf_egress_hook1);
-
-typedef void (*rmnet_aps_pre_queue_t)(struct net_device *dev,
-				      struct sk_buff *skb);
-rmnet_aps_pre_queue_t rmnet_aps_pre_queue __read_mostly;
-EXPORT_SYMBOL(rmnet_aps_pre_queue);
-
-typedef int (*rmnet_aps_post_queue_t)(struct net_device *dev,
-				      struct sk_buff *skb);
-rmnet_aps_post_queue_t rmnet_aps_post_queue __read_mostly;
-EXPORT_SYMBOL(rmnet_aps_post_queue);
-
-typedef void (*rmnet_wlan_ll_tuple_hook_t)(struct sk_buff *skb);
-rmnet_wlan_ll_tuple_hook_t rmnet_wlan_ll_tuple_hook __rcu __read_mostly;
-EXPORT_SYMBOL(rmnet_wlan_ll_tuple_hook);
 
 /* RX/TX Fixup */
 
@@ -98,117 +69,26 @@ static netdev_tx_t rmnet_vnd_start_xmit(struct sk_buff *skb,
 	int ip_type;
 	u32 mark;
 	unsigned int len;
-	rmnet_perf_tether_egress_hook_t rmnet_perf_tether_egress;
-	rmnet_aps_post_queue_t aps_post_queue;
-	rmnet_wlan_ll_tuple_hook_t rmnet_wlan_ll_tuple;
-	bool low_latency = false;
 	bool need_to_drop = false;
 
 	priv = netdev_priv(dev);
-
-	aps_post_queue = rcu_dereference(rmnet_aps_post_queue);
-	if (aps_post_queue)
-		if (unlikely(aps_post_queue(dev, skb))) {
-			this_cpu_inc(priv->pcpu_stats->stats.tx_drops);
-			kfree_skb(skb);
-			return NETDEV_TX_OK;
-		}
-
 	if (priv->real_dev) {
 		ip_type = (ip_hdr(skb)->version == 4) ?
 					AF_INET : AF_INET6;
 		mark = skb->mark;
 		len = skb->len;
 		trace_rmnet_xmit_skb(skb);
-		rmnet_perf_tether_egress = rcu_dereference(rmnet_perf_tether_egress_hook);
-		if (rmnet_perf_tether_egress) {
-			rmnet_perf_tether_egress(skb);
-		}
 
-		rmnet_wlan_ll_tuple = rcu_dereference(rmnet_wlan_ll_tuple_hook);
-		if (rmnet_wlan_ll_tuple) {
-			rmnet_wlan_ll_tuple(skb);
-		}
-
-		qmi_rmnet_get_flow_state(dev, skb, &need_to_drop, &low_latency);
+		qmi_rmnet_get_flow_state(dev, skb, &need_to_drop);
 		if (unlikely(need_to_drop)) {
 			this_cpu_inc(priv->pcpu_stats->stats.tx_drops);
 			kfree_skb(skb);
 			return NETDEV_TX_OK;
 		}
 
-		if (RMNET_APS_LLC(skb->priority))
-			low_latency = true;
-
-		if ((low_latency || RMNET_APS_LLB(skb->priority)) &&
-		    skb_is_gso(skb)) {
-			netdev_features_t features;
-			struct sk_buff *segs, *tmp;
-
-			features = dev->features & ~NETIF_F_GSO_MASK;
-			segs = skb_gso_segment(skb, features);
-			if (IS_ERR_OR_NULL(segs)) {
-				this_cpu_add(priv->pcpu_stats->stats.tx_drops,
-					     skb_shinfo(skb)->gso_segs);
-				priv->stats.ll_tso_errs++;
-				kfree_skb(skb);
-				return NETDEV_TX_OK;
-			}
-
-			consume_skb(skb);
-			for (skb = segs; skb; skb = tmp) {
-				tmp = skb->next;
-				skb->dev = dev;
-				priv->stats.ll_tso_segs++;
-				skb_mark_not_on_list(skb);
-				rmnet_egress_handler(skb, low_latency);
-			}
-		} else if (!low_latency && skb_is_gso(skb)) {
-			u64 gso_limit = priv->real_dev->gso_max_size ? : 1;
-			u16 gso_goal = 0;
-			netdev_features_t features = NETIF_F_SG;
-			u16 orig_gso_size = skb_shinfo(skb)->gso_size;
-			unsigned int orig_gso_type = skb_shinfo(skb)->gso_type;
-			struct sk_buff *segs, *tmp;
-
-			features |=  NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
-
-			if (skb->len < gso_limit || gso_limit > 65535) {
-				priv->stats.tso_segment_skip++;
-				rmnet_egress_handler(skb, low_latency);
-			} else {
-				do_div(gso_limit, skb_shinfo(skb)->gso_size);
-				gso_goal = gso_limit * skb_shinfo(skb)->gso_size;
-				skb_shinfo(skb)->gso_size = gso_goal;
-
-				segs = __skb_gso_segment(skb, features, false);
-				if (IS_ERR_OR_NULL(segs)) {
-					skb_shinfo(skb)->gso_size = orig_gso_size;
-					skb_shinfo(skb)->gso_type = orig_gso_type;
-
-					priv->stats.tso_segment_fail++;
-					rmnet_egress_handler(skb, low_latency);
-				} else {
-					consume_skb(skb);
-
-					for (skb = segs; skb; skb = tmp) {
-						tmp = skb->next;
-						skb->dev = dev;
-
-						skb_shinfo(skb)->gso_size = orig_gso_size;
-						skb_shinfo(skb)->gso_type = orig_gso_type;
-
-						priv->stats.tso_segment_success++;
-						skb_mark_not_on_list(skb);
-						rmnet_egress_handler(skb, low_latency);
-					}
-				}
-			}
-		} else {
-			rmnet_egress_handler(skb, low_latency);
-		}
+		rmnet_egress_handler(skb);
 		qmi_rmnet_burst_fc_check(dev, ip_type, mark, len);
-		qmi_rmnet_work_maybe_restart(rmnet_get_rmnet_port(dev), NULL, NULL);
+		qmi_rmnet_work_maybe_restart(rmnet_get_rmnet_port(dev));
 	} else {
 		this_cpu_inc(priv->pcpu_stats->stats.tx_drops);
 		kfree_skb(skb);
@@ -302,156 +182,23 @@ static u16 rmnet_vnd_select_queue(struct net_device *dev,
 	u64 boost_period = 0;
 	int boost_trigger = 0;
 	int txq = 0;
-	rmnet_perf_egress_hook1_t rmnet_perf_egress1;
-	rmnet_aps_pre_queue_t aps_pre_queue;
 
-	rmnet_perf_egress1 = rcu_dereference(rmnet_perf_egress_hook1);
-	if (rmnet_perf_egress1) {
-		rmnet_perf_egress1(skb);
-	}
-
-	if (trace_print_icmp_tx_enabled()) {
-		char saddr[INET6_ADDRSTRLEN], daddr[INET6_ADDRSTRLEN];
-		u16 ip_proto = 0;
-		__be16 sequence = 0;
-		u8 type = 0;
-
-		memset(saddr, 0, INET6_ADDRSTRLEN);
-		memset(daddr, 0, INET6_ADDRSTRLEN);
-
-		if (skb->protocol == htons(ETH_P_IP)) {
-			if (ip_hdr(skb)->protocol != IPPROTO_ICMP)
-				goto skip_trace_print_icmp_tx;
-
-			if (icmp_hdr(skb)->type != ICMP_ECHOREPLY &&
-			    icmp_hdr(skb)->type != ICMP_ECHO)
-				goto skip_trace_print_icmp_tx;
-
-			ip_proto = htons(ETH_P_IP);
-			type = icmp_hdr(skb)->type;
-			sequence = icmp_hdr(skb)->un.echo.sequence;
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->daddr);
-		}
-
-		if (skb->protocol == htons(ETH_P_IPV6)) {
-			if (ipv6_hdr(skb)->nexthdr != NEXTHDR_ICMP)
-				goto skip_trace_print_icmp_tx;
-
-			if (icmp6_hdr(skb)->icmp6_type != ICMPV6_ECHO_REQUEST &&
-			    icmp6_hdr(skb)->icmp6_type != ICMPV6_ECHO_REPLY)
-				goto skip_trace_print_icmp_tx;
-
-			ip_proto = htons(ETH_P_IPV6);
-			type = icmp6_hdr(skb)->icmp6_type;
-			sequence = icmp6_hdr(skb)->icmp6_sequence;
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->daddr);
-		}
-
-		if (!ip_proto)
-			goto skip_trace_print_icmp_tx;
-
-		trace_print_icmp_tx(skb, ip_proto, type, sequence, saddr, daddr);
-	}
-
-skip_trace_print_icmp_tx:
-	if (trace_print_tcp_tx_enabled()) {
-		char saddr[INET6_ADDRSTRLEN], daddr[INET6_ADDRSTRLEN];
-
-		memset(saddr, 0, INET6_ADDRSTRLEN);
-		memset(daddr, 0, INET6_ADDRSTRLEN);
+	if (trace_print_skb_gso_enabled()) {
+		if (!skb_shinfo(skb)->gso_size)
+			goto skip_trace;
 
 		if (skb->protocol == htons(ETH_P_IP)) {
 			if (ip_hdr(skb)->protocol != IPPROTO_TCP)
-				goto skip_trace_print_tcp_tx;
-
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->daddr);
+				goto skip_trace;
 		}
 
 		if (skb->protocol == htons(ETH_P_IPV6)) {
 			if (ipv6_hdr(skb)->nexthdr != IPPROTO_TCP)
-				goto skip_trace_print_tcp_tx;
-
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->daddr);
-		}
-
-		trace_print_tcp_tx(skb, saddr, daddr, tcp_hdr(skb));
-	}
-
-skip_trace_print_tcp_tx:
-	if (trace_print_udp_tx_enabled()) {
-		char saddr[INET6_ADDRSTRLEN], daddr[INET6_ADDRSTRLEN];
-		u16 ip_id = 0;
-
-		memset(saddr, 0, INET6_ADDRSTRLEN);
-		memset(daddr, 0, INET6_ADDRSTRLEN);
-
-		if (skb->protocol == htons(ETH_P_IP)) {
-			if (ip_hdr(skb)->protocol != IPPROTO_UDP)
-				goto skip_trace_print_udp_tx;
-
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->daddr);
-			ip_id = ntohs(ip_hdr(skb)->id);
-		}
-
-		if (skb->protocol == htons(ETH_P_IPV6)) {
-			if (ipv6_hdr(skb)->nexthdr != IPPROTO_UDP)
-				goto skip_trace_print_udp_tx;
-
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->daddr);
-		}
-
-		trace_print_udp_tx(skb, saddr, daddr, udp_hdr(skb), ip_id);
-	}
-
-skip_trace_print_udp_tx:
-	if (trace_print_skb_gso_enabled()) {
-		char saddr[INET6_ADDRSTRLEN], daddr[INET6_ADDRSTRLEN];
-		u16 ip_proto = 0, xport_proto = 0;
-
-		if (!skb_shinfo(skb)->gso_size)
-			goto skip_trace;
-
-		memset(saddr, 0, INET6_ADDRSTRLEN);
-		memset(daddr, 0, INET6_ADDRSTRLEN);
-
-		if (skb->protocol == htons(ETH_P_IP)) {
-			if (ip_hdr(skb)->protocol == IPPROTO_TCP)
-				xport_proto = IPPROTO_TCP;
-			else if (ip_hdr(skb)->protocol == IPPROTO_UDP)
-				xport_proto = IPPROTO_UDP;
-			else
 				goto skip_trace;
-
-			ip_proto = htons(ETH_P_IP);
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI4", &ip_hdr(skb)->daddr);
 		}
 
-		if (skb->protocol == htons(ETH_P_IPV6)) {
-			if (ipv6_hdr(skb)->nexthdr == IPPROTO_TCP)
-				xport_proto = IPPROTO_TCP;
-			else if (ipv6_hdr(skb)->nexthdr == IPPROTO_UDP)
-				xport_proto = IPPROTO_UDP;
-			else
-				goto skip_trace;
-
-			ip_proto = htons(ETH_P_IPV6);
-			snprintf(saddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->saddr);
-			snprintf(daddr, INET6_ADDRSTRLEN, "%pI6", &ipv6_hdr(skb)->daddr);
-		}
-
-		trace_print_skb_gso(skb,
-				    xport_proto == IPPROTO_TCP ? tcp_hdr(skb)->source :
-								 udp_hdr(skb)->source,
-				    xport_proto == IPPROTO_TCP ? tcp_hdr(skb)->dest :
-								 udp_hdr(skb)->dest,
-				    ip_proto, xport_proto, saddr, daddr);
+		trace_print_skb_gso(skb, tcp_hdr(skb)->source,
+				    tcp_hdr(skb)->dest);
 	}
 
 skip_trace:
@@ -467,10 +214,6 @@ skip_trace:
 		if (boost_trigger)
 			(void) boost_period;
 	}
-
-	aps_pre_queue = rcu_dereference(rmnet_aps_pre_queue);
-	if (aps_pre_queue)
-		aps_pre_queue(dev, skb);
 
 	return (txq < dev->real_num_tx_queues) ? txq : 0;
 }
@@ -519,31 +262,11 @@ static const char rmnet_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"Coalescing packets over VEID1",
 	"Coalescing packets over VEID2",
 	"Coalescing packets over VEID3",
-	"Coalescing packets over VEID4",
-	"Coalescing packets over VEID5",
-	"Coalescing packets over VEID6",
-	"Coalescing packets over VEID7",
-	"Coalescing packets over VEID8",
-	"Coalescing packets over VEID9",
-	"Coalescing packets over VEID10",
-	"Coalescing packets over VEID11",
-	"Coalescing packets over VEID12",
-	"Coalescing packets over VEID13",
-	"Coalescing packets over VEID14",
-	"Coalescing packets over VEID15",
 	"Coalescing TCP frames",
 	"Coalescing TCP bytes",
 	"Coalescing UDP frames",
 	"Coalescing UDP bytes",
 	"Uplink priority packets",
-	"TSO packets",
-	"TSO packets arriving incorrectly",
-	"TSO segment success",
-	"TSO segment fail",
-	"TSO segment skip",
-	"LL TSO segment success",
-	"LL TSO segment fail",
-	"APS priority packets",
 };
 
 static const char rmnet_port_gstrings_stats[][ETH_GSTRING_LEN] = {
@@ -561,67 +284,17 @@ static const char rmnet_port_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"DL trailer pkts received",
 	"UL agg reuse",
 	"UL agg alloc",
-	"DL chaining [0-10)",
-	"DL chaining [10-20)",
-	"DL chaining [20-30)",
-	"DL chaining [30-40)",
-	"DL chaining [40-50)",
-	"DL chaining [50-60)",
-	"DL chaining >= 60",
-	"DL chaining frags [0-1]",
-	"DL chaining frags [2-3]",
-	"DL chaining frags [4-7]",
-	"DL chaining frags [8-11]",
-	"DL chaining frags [12-15]",
-	"DL chaining frags = 16",
-	"PB Byte Marker Count",
-};
-
-static const char rmnet_ll_gstrings_stats[][ETH_GSTRING_LEN] = {
-	"LL TX queues",
-	"LL TX queue errors",
-	"LL TX completions",
-	"LL TX completion errors",
-	"LL RX queues",
-	"LL RX queue errors",
-	"LL RX status errors",
-	"LL RX empty transfers",
-	"LL RX OOM errors",
-	"LL RX packets",
-	"LL RX temp buffer allocations",
-	"LL TX disabled",
-	"LL TX enabled",
-	"LL TX FC queued",
-	"LL TX FC sent",
-	"LL TX FC err",
-};
-
-static const char rmnet_qmap_gstrings_stats[][ETH_GSTRING_LEN] = {
-	"QMAP RX success",
-	"QMAP RX errors",
-	"QMAP TX queued",
-	"QMAP TX errors",
-	"QMAP TX complete (MHI)",
 };
 
 static void rmnet_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 {
-	size_t off = 0;
-
 	switch (stringset) {
 	case ETH_SS_STATS:
 		memcpy(buf, &rmnet_gstrings_stats,
 		       sizeof(rmnet_gstrings_stats));
-		off += sizeof(rmnet_gstrings_stats);
-		memcpy(buf + off,
+		memcpy(buf + sizeof(rmnet_gstrings_stats),
 		       &rmnet_port_gstrings_stats,
 		       sizeof(rmnet_port_gstrings_stats));
-		off += sizeof(rmnet_port_gstrings_stats);
-		memcpy(buf + off, &rmnet_ll_gstrings_stats,
-		       sizeof(rmnet_ll_gstrings_stats));
-		off += sizeof(rmnet_ll_gstrings_stats);
-		memcpy(buf + off, &rmnet_qmap_gstrings_stats,
-		       sizeof(rmnet_qmap_gstrings_stats));
 		break;
 	}
 }
@@ -631,9 +304,7 @@ static int rmnet_get_sset_count(struct net_device *dev, int sset)
 	switch (sset) {
 	case ETH_SS_STATS:
 		return ARRAY_SIZE(rmnet_gstrings_stats) +
-		       ARRAY_SIZE(rmnet_port_gstrings_stats) +
-		       ARRAY_SIZE(rmnet_ll_gstrings_stats) +
-		       ARRAY_SIZE(rmnet_qmap_gstrings_stats);
+		       ARRAY_SIZE(rmnet_port_gstrings_stats);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -645,10 +316,7 @@ static void rmnet_get_ethtool_stats(struct net_device *dev,
 	struct rmnet_priv *priv = netdev_priv(dev);
 	struct rmnet_priv_stats *st = &priv->stats;
 	struct rmnet_port_priv_stats *stp;
-	struct rmnet_ll_stats *llp;
 	struct rmnet_port *port;
-	size_t off = 0;
-	u64 qmap_s[ARRAY_SIZE(rmnet_qmap_gstrings_stats)];
 
 	port = rmnet_get_port(priv->real_dev);
 
@@ -656,21 +324,10 @@ static void rmnet_get_ethtool_stats(struct net_device *dev,
 		return;
 
 	stp = &port->stats;
-	llp = rmnet_ll_get_stats();
 
 	memcpy(data, st, ARRAY_SIZE(rmnet_gstrings_stats) * sizeof(u64));
-	off += ARRAY_SIZE(rmnet_gstrings_stats);
-	memcpy(data + off, stp,
+	memcpy(data + ARRAY_SIZE(rmnet_gstrings_stats), stp,
 	       ARRAY_SIZE(rmnet_port_gstrings_stats) * sizeof(u64));
-	off += ARRAY_SIZE(rmnet_port_gstrings_stats);
-	memcpy(data + off, llp,
-	       ARRAY_SIZE(rmnet_ll_gstrings_stats) * sizeof(u64));
-
-	off += ARRAY_SIZE(rmnet_ll_gstrings_stats);
-	memset(qmap_s, 0, sizeof(qmap_s));
-	rmnet_ctl_get_stats(qmap_s, ARRAY_SIZE(rmnet_qmap_gstrings_stats));
-	memcpy(data + off, qmap_s,
-	       ARRAY_SIZE(rmnet_qmap_gstrings_stats) * sizeof(u64));
 }
 
 static int rmnet_stats_reset(struct net_device *dev)
@@ -710,7 +367,7 @@ void rmnet_vnd_setup(struct net_device *rmnet_dev)
 	rmnet_dev->netdev_ops = &rmnet_vnd_ops;
 	rmnet_dev->mtu = RMNET_DFLT_PACKET_SIZE;
 	rmnet_dev->needed_headroom = RMNET_NEEDED_HEADROOM;
-	eth_random_addr(rmnet_dev->perm_addr);
+	random_ether_addr(rmnet_dev->perm_addr);
 	rmnet_dev->tx_queue_len = RMNET_TX_QUEUE_LEN;
 
 	/* Raw IP mode */
@@ -743,12 +400,8 @@ int rmnet_vnd_newlink(u8 id, struct net_device *rmnet_dev,
 	rmnet_dev->hw_features |= NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
 	rmnet_dev->hw_features |= NETIF_F_SG;
 	rmnet_dev->hw_features |= NETIF_F_GRO_HW;
-	rmnet_dev->hw_features |= NETIF_F_GSO_UDP_L4;
-	rmnet_dev->hw_features |= NETIF_F_ALL_TSO;
 
 	priv->real_dev = real_dev;
-
-	rmnet_dev->gso_max_size = 64000;
 
 	rc = register_netdevice(rmnet_dev);
 	if (!rc) {
@@ -807,5 +460,5 @@ void rmnet_vnd_reset_mac_addr(struct net_device *dev)
 	if (dev->netdev_ops != &rmnet_vnd_ops)
 		return;
 
-	eth_random_addr(dev->perm_addr);
+	random_ether_addr(dev->perm_addr);
 }
