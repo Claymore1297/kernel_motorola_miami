@@ -1453,7 +1453,7 @@ CONFIG_NFC=m
 #
 # CONFIG_NFC_PN533_USB is not set
 # CONFIG_NFC_PN533_I2C is not set
-# CONFIG_NFC_ST21NFC is not set
+CONFIG_NFC_ST21NFC=m
 
 #
 # Near Field Communication (NFC) devices
