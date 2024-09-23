@@ -1443,41 +1443,8 @@ CONFIG_RFKILL_LEDS=y
 # CONFIG_NET_9P is not set
 # CONFIG_CAIF is not set
 # CONFIG_CEPH_LIB is not set
-CONFIG_NFC=m
-# CONFIG_NFC_DIGITAL is not set
-# CONFIG_NFC_NCI is not set
-# CONFIG_NFC_HCI is not set
-
-#
-# Near Field Communication (NFC) devices
-#
-# CONFIG_NFC_PN533_USB is not set
-# CONFIG_NFC_PN533_I2C is not set
-# CONFIG_NFC_ST21NFC is not set
-
-#
-# Near Field Communication (NFC) devices
-#
-CONFIG_SEC_NFC=m
-# CONFIG_SEC_NFC_PRODUCT_N3 is not set
-CONFIG_SEC_NFC_PRODUCT_N5=y
-# CONFIG_SEC_NFC_IF_UART is not set
-CONFIG_SEC_NFC_IF_I2C=y
-# CONFIG_SEC_NFC_IF_I2C_GPIO is not set
-# CONFIG_SEC_NFC_GPIO_CLK is not set
-CONFIG_SEC_NFC_DEDICATED_CLK=m
-CONFIG_SEC_NFC_LDO_EN=m
-CONFIG_SEC_NFC_PMIC_LDO=m
-CONFIG_SEC_ESE_COLDRESET=m
-# end of Near Field Communication (NFC) devices
-
-#
-# Near Field Communication (NFC) devices
-#
-# end of Near Field Communication (NFC) devices
-# end of Near Field Communication (NFC) devices
-
-# CONFIG_NFC_QTI_I2C is not set
+# CONFIG_NFC is not set
+CONFIG_NFC_QTI_I2C=y
 # CONFIG_NFC_QTI_I3C_GPIO is not set
 # CONFIG_PSAMPLE is not set
 # CONFIG_NET_IFE is not set
