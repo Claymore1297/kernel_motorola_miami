@@ -702,7 +702,7 @@ static int aw99703_probe(struct i2c_client *client,
 {
 	struct aw99703_data *drvdata;
 #ifdef KERNEL_ABOVE_4_14
-	struct backlight_device *bl_dev;
+	struct backlight_device __maybe_unused *bl_dev;
 	struct backlight_properties props;
 #endif
 	int err = 0;
