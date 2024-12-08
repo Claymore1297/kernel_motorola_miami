@@ -1319,8 +1319,9 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 			dsi_panel_set_local_hbm_param(panel, param_info, lhbm_config);
 		}
 
-	if (panel->lhbm_config.lhbm_wait_for_fps_valid && param_info->value == HBM_FOD_ON_STATE)
-		dsi_panel_lhbm_waitfor_fps_valid(panel);
+		if (panel->lhbm_config.lhbm_wait_for_fps_valid && param_info->value == HBM_FOD_ON_STATE) {
+			dsi_panel_lhbm_waitfor_fps_valid(panel);
+		}
 
 	rc = dsi_panel_send_param_cmd(panel, param_info);
 	if (rc < 0) {
