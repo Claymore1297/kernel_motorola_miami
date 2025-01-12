@@ -2126,7 +2126,7 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 	if (chip->main_charger_name) {
 		chip->main_chg_dev = get_charger_by_name(chip->main_charger_name);
 		if (!chip->main_chg_dev) {
-			cps_wls_log(chip, "*** Error : can't find main charger %s***\n", chip->main_charger_name);
+			cps_wls_log(CPS_LOG_ERR, "*** Error : can't find main charger %s***\n", chip->main_charger_name);
 		}
 	}
 
