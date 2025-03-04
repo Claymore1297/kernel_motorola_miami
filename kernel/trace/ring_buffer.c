@@ -581,19 +581,8 @@ static void rb_wake_up_waiters(struct irq_work *work)
 
 	wake_up_all(&rbwork->waiters);
 	if (rbwork->full_waiters_pending || rbwork->wakeup_full) {
-		/* Only cpu_buffer sets the above flags */
-		struct ring_buffer_per_cpu *cpu_buffer =
-			container_of(rbwork, struct ring_buffer_per_cpu, irq_work);
-
-		/* Called from interrupt context */
-		raw_spin_lock(&cpu_buffer->reader_lock);
 		rbwork->wakeup_full = false;
 		rbwork->full_waiters_pending = false;
-
-		/* Waking up all waiters, they will reset the shortest full */
-		cpu_buffer->shortest_full = 0;
-		raw_spin_unlock(&cpu_buffer->reader_lock);
-
 		wake_up_all(&rbwork->full_waiters);
 	}
 }
